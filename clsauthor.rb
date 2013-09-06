@@ -160,7 +160,7 @@ class SSRNPaper
     postfile = Tempfile.new('clsauthor')
     postfile.write(html)
     postfile.close
-    #comment
+    #comment     more comment
 
 
   end
