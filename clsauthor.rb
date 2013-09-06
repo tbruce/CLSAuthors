@@ -5,19 +5,26 @@
 #    listed on a single page, no matter how many there are.
 
 
+CLS_TRIPLE_FILE=''
 SSRN_AUTHOR_PREFIX='http://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id='
 SSRN_ABSTRACT_PREFIX='http://papers.ssrn.com/sol3/papers.cfm?abstract_id='
+GOOGLE_UID='access.lii.cornell@gmail.com'
+GOOGLE_PWD='crankmaster'
+GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
+CITATIONER_URI='http://mojo.law.cornell.edu/services/citationer/'
 
 require 'rubygems'
 require 'net/http'
 require 'simple-tidy'
 require 'nokogiri'
 require 'chronic'
+require 'google_drive'
+require 'tempfile'
 
 #-- class for representing/modeling SSRN abstract pages
 
 class SSRNAbstractPage
-  attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title
+  attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:paper_url
 
   def initialize(my_id, my_author_id)
     @paper_id = my_id
@@ -32,6 +39,12 @@ class SSRNAbstractPage
     @pub_date = nil
     @doi = nil
     @title = nil
+    @paper_url = nil
+    @abstract_views = nil
+    @paper_dls = nil
+    @paper_citations = nil
+    @paper_footnotes = nil
+    @dl_rank = nil
 
     begin
       uri = URI(@url)
@@ -53,8 +66,9 @@ class SSRNAbstractPage
   end
 
   #-- scrape the contents of the page
-  def populate
+  def scrape
     scrape_metas
+    scrape_stats
     scrape_authors
     scrape_abstract
     scrape_jelcodes
@@ -66,7 +80,27 @@ class SSRNAbstractPage
       @online_date = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
       @pub_date = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
       @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
+      @paper_url =@doc.at_xpath("//meta[@name='citation_pdf_url']")["content"]
       @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
+  end
+
+  #-- get paper statistics
+  def scrape_stats
+    @labels = Array.new
+    @stats = Array.new
+    @doc.css("span.statisticsText").each do |label|
+      @labels.push(label.inner_text())
+    end
+    idx = 0
+    @doc.css("span.statNumber").each do |stat|
+      num = stat.inner_text().gsub!(/[^0-9]/,'').to_i
+      @abstract_views = num if @labels[idx] =~ /Views/
+      @paper_dls = num if @labels[idx] =~ /Downloads/
+      @paper_citations = num if @labels[idx] =~ /Citations/
+      @paper_footnotes = num if @labels[idx] =~ /Footnotes/
+      @dl_rank = num if @labels[idx] =~ /Rank/
+      idx = idx+1
+    end
   end
 
   #-- get SSRN IDs of coauthors
@@ -85,12 +119,12 @@ class SSRNAbstractPage
     @doc.xpath("//div/div/div/p/font").each do |chunk|
       stuff = /JEL\s*Classification:\s*((([A-Z][0-9]+),*\s*)+)/.match(chunk.inner_text())
       if stuff
-        @jelcodes = stuff[1].split(/\,\s*/)
+        @jelcodes = stuff[1].split(/,\s*/)
       end
     end
   end
 
-  def make_triples
+  def create_triples
   end
 
 
@@ -101,16 +135,38 @@ Title: #{@title}
 Online date: #{@online_date}
 Publication date: #{@pub_date}
 DOI: #{@doi}
+PDF URL: #{@paper_url}
 
 Abstract: #{@abstract}
 
 Keywords: #{@keywords.join("\n")}
 JEL classification: #{@jelcodes.join("\n")}
 Coauthors (SSRN): #{@coauthors.join("\n")}
+Abstract views: #{@abstract_views}
+Downloads: #{@paper_dls}
+Citations: #{@paper_citations}
+Footnotes: #{@paper_footnotes}
+Download rank: #{@dl_rank}
     eos
   end
 end
 
+class SSRNPaper
+  def initialize(paper_url)
+    # could be HTML, PDF, pretty much anything
+    @stuff = Net::HTTP.get(URI(paper_url))
+  end
+  def extract_citations
+    postfile = Tempfile.new('clsauthor')
+    postfile.write(html)
+    postfile.close
+
+
+  end
+  def create_triples
+
+  end
+end
 
 #-- class for modeling/constructing SSRN author pages
 
@@ -118,7 +174,7 @@ class SSRNAuthorPage
   attr_reader :ssrn_id, :paperlist
   def initialize(my_ssrn_id)
     @ssrn_id = my_ssrn_id
-    @paperlist = Array.new()
+    @abstractlist = Array.new()
     begin
       html = Net::HTTP.get(URI(SSRN_AUTHOR_PREFIX+@ssrn_id))
       raise "Author listing page for ID #{@ssrn_id} unavailable" unless html
@@ -135,22 +191,25 @@ class SSRNAuthorPage
     @doc = Nokogiri::HTML(clean_html)
   end
 
-  #-- gather the list of abstract ids for each author yo
-  def scrape_papers
+  #-- gather the list of abstract ids for each author
+  def scrape
     @doc.xpath("//a[@class='textlink']").each do |link|
       stuff = /http:\/\/ssrn\.com\/abstract=([0-9]+)/.match(link['href'])
-      @paperlist.push stuff[1] if stuff
+      @abstractlist.push stuff[1] if stuff
     end
   end
 
-  def process_papers
-    @paperlist.each do |absnum|
+  def process_abstracts
+    @abstractlist.each do |absnum|
+      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id)
+      abstract.scrape
+      abstract.create_triples
     end
   end
 
   def to_s
     strang = <<-"eos"
-     #{@paperlist.join("\n")}
+     #{@abstractlist.join("\n")}
   eos
   end
 end
@@ -161,7 +220,14 @@ class CLSAuthorEndpoint
   end
 end
 
+#-- processes the configuration spreadsheet
 class CLSAuthorSpreadsheet
+  def initialize
+
+  end
+  def create_triples
+
+  end
 end
 
 
@@ -172,7 +238,12 @@ end
 # for each author, get the papers
 # emit the paper triples however
 
+# page/paperlist test
+#pg = SSRNAuthorPage.new('45120')
+#pg.scrape
+#puts "#{pg}"
 
-pg = SSRNAuthorPage.new('45120')
-pg.scrape_papers
+# abstract page test
+pg = SSRNAbstractPage.new('2218855','489995')
+pg.scrape
 puts "#{pg}"

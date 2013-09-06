@@ -1,1 +1,40 @@
 This file was created by JetBrains RubyMine 5.4.3.2.1 for binding GitHub repository
+
+How it works.
+
+This code supports the creation of RDF triples containing metadata about legal scholars and their publications. Basic
+information about the scholars is entered in a GoogleDocs spreadsheet; the application uses this data to access and
+leverage other information, primarily from SSRN.  The results are output as triples conforming to a related OWL
+ontology.
+
+Right now, it's a blunt instrument that regenerates everything every time.  This may result in annoying over-harvesting
+from SSRN.
+
+
+General behavior
+
++ Application reads author metadata from the Google spreadsheet.
++ For each author
+    + Triples that can be generated solely from the author metadata are created.
+    + The SSRN author page is scraped. No metadata is taken directly from it, as it doesn't have much that we can
+    scrape/use.  A list of URLs for SSRN abstracts is generated.
+    + The list of abstracts is processed.  For each abstract:
+        + Metadata is extracted and turned into triples.
+        + The abstract is sent to Citationer for citation extraction.
+        + The paper's PDF is retrieved.
+        + The paper PDF is sent to LII's Citationer extraction program and all citations returned, and stored as
+        triples.
+
+All triples are output to a single file.  For updating and data-management purposes, the file can be split into
+several files (author info, paper info, citation info) by specifying the --splitfile command-line switch
+
+Operation
+
+All triples go to STDOUT by default.
+
++  Command-line switches
+    + --nossrn  inhibits harvesting of papers from SSRN
+    + --splitfile reprocesses the output file into separate chunks for management purposes.
+
+
+Data design and schema
