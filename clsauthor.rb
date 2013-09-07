@@ -8,6 +8,7 @@
 CLS_TRIPLE_FILE=''
 SSRN_AUTHOR_PREFIX='http://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id='
 SSRN_ABSTRACT_PREFIX='http://papers.ssrn.com/sol3/papers.cfm?abstract_id='
+LII_SSRN_URI_PREFIX='http://liicornell.org/ssrn/papers/'
 GOOGLE_UID='access.lii.cornell@gmail.com'
 GOOGLE_PWD='crankmaster'
 GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
@@ -26,10 +27,11 @@ require 'tempfile'
 class SSRNAbstractPage
   attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:paper_url
 
-  def initialize(my_id, my_author_id)
+  def initialize(my_id, my_ssrn_author_id, my_author_uri)
     @paper_id = my_id
     @author_id = my_author_id
     @url = SSRN_ABSTRACT_PREFIX + my_id
+    @paper_URI = LII_SSRN_URI_PREFIX + my_id
 
     @keywords = Array.new()
     @jelcodes = Array.new()
@@ -155,6 +157,7 @@ class SSRNPaper
   def initialize(paper_url)
     # could be HTML, PDF, pretty much anything
     @stuff = Net::HTTP.get(URI(paper_url))
+    @citation_list = Array.new
   end
   def extract_citations
     postfile = Tempfile.new('clsauthor')
@@ -172,8 +175,9 @@ end
 #-- class for modeling/constructing SSRN author pages
 
 class SSRNAuthorPage
-  attr_reader :ssrn_id, :paperlist
-  def initialize(my_ssrn_id)
+  attr_reader :ssrn_id, :abstractlist
+  def initialize(my_ssrn_id, author_uri)
+    @author_URI = author_uri
     @ssrn_id = my_ssrn_id
     @abstractlist = Array.new()
     begin
@@ -200,14 +204,17 @@ class SSRNAuthorPage
     end
   end
 
+  #-- process each of the abstracts listed on the page
+
   def process_abstracts
     @abstractlist.each do |absnum|
-      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id)
+      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
       abstract.scrape
       abstract.create_triples
     end
   end
 
+  #-- override to_s for diagnostic purposes
   def to_s
     strang = <<-"eos"
      #{@abstractlist.join("\n")}
@@ -216,18 +223,110 @@ class SSRNAuthorPage
 end
 
 
-class CLSAuthorEndpoint
-  def initialize(my_url)
+class CLSAuthor
+  # these variables don't follow ruby conventions -- they're named to correspond to properties in the data model
+  # in a vain attempt to avoid confusion
+  attr_accessor :birthday,:dateOfDeath,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
+  attr_accessor :openGraphID, :orcidID, :ssrnAuthorID, :worldCatID, :clsBio, :linkedInProfile, :homepage
+  attr_accessor :viafID, :crossRefID
+  def initialize(author_uri)
+    @liiScholarID = author_uri
+  end
+
+  #-- create triples for everything we know about the author
+  def create_triples
+
+
+  end
+  #-- incomplete string output for testing
+  def to_s
+    strang =<<-"eos"
+    Last:  #{lastName}
+    First: #{firstName}
+    Middle: #{middleName}
+  eos
+   return strang
   end
 end
 
 #-- processes the configuration spreadsheet
+#-- assumes first row of spreadsheet is column labels
+#-- mapping of column labels to data elements is in the "populate_author" method
 class CLSAuthorSpreadsheet
+  attr_reader :author_list
+
+  # this badly needs exception-handling
   def initialize
-
+    session = GoogleDrive.login(GOOGLE_UID,GOOGLE_PWD)
+    @ws = session.spreadsheet_by_key(GOOGLE_SPREADSHEET_KEY).worksheets[0]
+    @author_list = Array.new
+    @colnames = Array.new
+    get_colnames
+    populate_list
   end
-  def create_triples
 
+  # populates the authorlist data structure from the spreadsheet
+  # work in row-major order starting from row 2
+  def populate_list
+    uricol = @colnames.index("clsScholarID")+1
+    for row in 2..@ws.num_rows()
+      break if @ws[row,1] =~ /Note|Stop|(^\s+)/i  || @ws[row,1].empty?
+      author = CLSAuthor.new(@ws[row,uricol])
+      populate_author(row,author)
+      @author_list.push(author)
+    end
+  end
+
+  # populates a single author entry
+  def populate_author(row, author)
+    author.birthday= @ws[row,@colnames.index("Birthdate")+1]
+    author.dateOfDeath= @ws[row,@colnames.index("DeathDate")+1]
+    author.firstName=  @ws[row,@colnames.index("First name")+1]
+    author.lastName= @ws[row,@colnames.index("Last name")+1]
+    author.middleName= @ws[row,@colnames.index("Middle name")+1]
+    author.gPlusID= @ws[row,@colnames.index("googlePlusID")+1]
+    author.gScholarID= @ws[row,@colnames.index("googleScholarID")+1]
+    author.liiScholarID= @ws[row,@colnames.index("clsScholarID")+1]
+    author.openGraphID= @ws[row,@colnames.index("openGraphID")+1]
+    author.orcidID=@ws[row,@colnames.index("orcID")+1]
+    author.ssrnAuthorID= @ws[row,@colnames.index("ssrnID")+1]
+    author.worldCatID= @ws[row,@colnames.index("worldCatID")+1]
+    author.clsBio= @ws[row,@colnames.index("clsBioURL")+1]
+    author.linkedInProfile= @ws[row,@colnames.index("linkedInProfile")+1]
+    author.homepage= @ws[row,@colnames.index("Homepage")+1]
+    author.viafID= @ws[row,@colnames.index("viafID")+1]
+    author.crossRefID= @ws[row,@colnames.index("crossRefID")+1]
+  end
+
+  def process_papers
+    @author_list.each do |author|
+      next if author.ssrnAuthorId.empty?
+      page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      page.process_abstracts
+    end
+  end
+
+  # populates list of column names
+  def get_colnames
+    for col in 1..@ws.num_cols()
+      @colnames.push(@ws[1,col])
+    end
+  end
+
+  #-- create triples calls create_triples for each author in the list
+  def create_triples
+    @author_list.each do |author|
+      author.create_triples
+    end
+  end
+
+  # override puts for diagnostic purposes
+  def to_s
+    stuff = ""
+    @author_list.each do |author|
+      stuff = stuff + author.to_s
+    end
+    puts "#{stuff}"
   end
 end
 
@@ -245,6 +344,11 @@ end
 #puts "#{pg}"
 
 # abstract page test
-pg = SSRNAbstractPage.new('2218855','489995')
-pg.scrape
-puts "#{pg}"
+#pg = SSRNAbstractPage.new('2218855','489995')
+#pg.scrape
+#puts "#{pg}"
+
+# spreadsheet test
+sheet = CLSAuthorSpreadsheet.new()
+stuff = sheet.to_s
+puts "#{stuff}"
