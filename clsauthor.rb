@@ -6,12 +6,17 @@
 
 
 CLS_TRIPLE_FILE=''
+
+# SSRN-related config information
 SSRN_AUTHOR_PREFIX='http://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id='
 SSRN_ABSTRACT_PREFIX='http://papers.ssrn.com/sol3/papers.cfm?abstract_id='
 LII_SSRN_URI_PREFIX='http://liicornell.org/ssrn/papers/'
+
+# google related config information
 GOOGLE_UID='access.lii.cornell@gmail.com'
 GOOGLE_PWD='crankmaster'
 GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
+
 CITATIONER_URI='http://mojo.law.cornell.edu/services/citationer/'
 
 require 'rubygems'
@@ -21,15 +26,16 @@ require 'nokogiri'
 require 'chronic'
 require 'google_drive'
 require 'tempfile'
+require 'curb'
 
 #-- class for representing/modeling SSRN abstract pages
 
 class SSRNAbstractPage
   attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:paper_url
 
-  def initialize(my_id, my_ssrn_author_id, my_author_uri)
+  def initialize(my_id, my_ssrn_author_id)
     @paper_id = my_id
-    @author_id = my_author_id
+    @author_id = my_ssrn_author_id
     @url = SSRN_ABSTRACT_PREFIX + my_id
     @paper_URI = LII_SSRN_URI_PREFIX + my_id
 
@@ -47,6 +53,7 @@ class SSRNAbstractPage
     @paper_citations = nil
     @paper_footnotes = nil
     @dl_rank = nil
+    @extracted_citations = Array.new()
 
     begin
       uri = URI(@url)
@@ -74,6 +81,7 @@ class SSRNAbstractPage
     scrape_authors
     scrape_abstract
     scrape_jelcodes
+    extract_paper_citations
   end
 
   #-- get interesting metatag content
@@ -126,6 +134,11 @@ class SSRNAbstractPage
     end
   end
 
+  def extract_paper_citations
+    fullpaper = SSRNPaper.new(@paper_url)
+    @extracted_citations = fullpaper.extract_citations
+  end
+
   def create_triples
   end
 
@@ -159,13 +172,19 @@ class SSRNPaper
     @stuff = Net::HTTP.get(URI(paper_url))
     @citation_list = Array.new
   end
+
+  #-- pull out citations using LII Citationer service
   def extract_citations
     postfile = Tempfile.new('clsauthor')
-    postfile.write(html)
+    postfile.write(@stuff)
     postfile.close
-    #comment     more comment
 
-
+    c = Curl::Easy.new(CITATIONER_URI)
+    c.multipart_form_post = true
+    c.http_post(Curl::PostField.file('userfile[]', postfile.path))
+    jsn = c.body_str
+    puts "#{jsn}"
+    return @citation_list
   end
   def create_triples
 
@@ -208,7 +227,7 @@ class SSRNAuthorPage
 
   def process_abstracts
     @abstractlist.each do |absnum|
-      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
+      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id)
       abstract.scrape
       abstract.create_triples
     end
@@ -300,7 +319,7 @@ class CLSAuthorSpreadsheet
 
   def process_papers
     @author_list.each do |author|
-      next if author.ssrnAuthorId.empty?
+      next if author.ssrnAuthorID.empty?
       page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
       page.process_abstracts
     end
@@ -344,11 +363,11 @@ end
 #puts "#{pg}"
 
 # abstract page test
-#pg = SSRNAbstractPage.new('2218855','489995')
-#pg.scrape
-#puts "#{pg}"
+pg = SSRNAbstractPage.new('2218855','489995')
+pg.scrape
+puts "#{pg}"
 
 # spreadsheet test
-sheet = CLSAuthorSpreadsheet.new()
-stuff = sheet.to_s
-puts "#{stuff}"
+#sheet = CLSAuthorSpreadsheet.new()
+#stuff = sheet.to_s
+#puts "#{stuff}"
