@@ -169,19 +169,27 @@ end
 class SSRNPaper
   def initialize(paper_url)
     # could be HTML, PDF, pretty much anything
-    @stuff = Net::HTTP.get(URI(paper_url))
+    @uri = URI.new(paper_url)
     @citation_list = Array.new
   end
 
   #-- pull out citations using LII Citationer service
   def extract_citations
     postfile = Tempfile.new('clsauthor')
-    postfile.write(@stuff)
+    Net::HTTP.start(@uri.host,@uri.port) do |http|
+      request = Net::HTTP::Get.new @uri
+      http.request request do |response|
+        response.read_body do |chunk|
+          postfile.write chunk
+        end
+      end
+    end
+
     postfile.close
 
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
-    c.http_post(Curl::PostField.file('files', postfile.path))
+    c.http_post(Curl::PostField.file('files',postfile.path))
     jsn = c.body_str
     puts "#{jsn}"
     return @citation_list
