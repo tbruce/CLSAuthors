@@ -181,7 +181,7 @@ class SSRNPaper
 
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
-    c.http_post(Curl::PostField.file('userfile[]', postfile.path))
+    c.http_post(Curl::PostField.file('files', postfile.path))
     jsn = c.body_str
     puts "#{jsn}"
     return @citation_list
