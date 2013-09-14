@@ -8,6 +8,10 @@
 CLS_TRIPLE_FILE=''
 
 # SSRN-related config information
+
+SSRN_ACCOUNT_NAME='trb2@cornell.edu'
+SSRN_ACCOUNT_PWD='gruel07'
+SSRN_LOGIN_AJAX = 'http://www.ssrn.com/loginAjaxHeader.cfm?login=true&username=' + SSRN_ACCOUNT_NAME + '&pass=' + SSRN_ACCOUNT_PWD
 SSRN_AUTHOR_PREFIX='http://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id='
 SSRN_ABSTRACT_PREFIX='http://papers.ssrn.com/sol3/papers.cfm?abstract_id='
 LII_SSRN_URI_PREFIX='http://liicornell.org/ssrn/papers/'
@@ -27,11 +31,13 @@ require 'chronic'
 require 'google_drive'
 require 'tempfile'
 require 'curb'
+require 'watir-webdriver'
+require 'headless'
 
 #-- class for representing/modeling SSRN abstract pages
 
 class SSRNAbstractPage
-  attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:paper_url
+  attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:pdf_url
 
   def initialize(my_id, my_ssrn_author_id)
     @paper_id = my_id
@@ -47,7 +53,7 @@ class SSRNAbstractPage
     @pub_date = nil
     @doi = nil
     @title = nil
-    @paper_url = nil
+    @pdf_url = nil
     @abstract_views = nil
     @paper_dls = nil
     @paper_citations = nil
@@ -81,7 +87,6 @@ class SSRNAbstractPage
     scrape_authors
     scrape_abstract
     scrape_jelcodes
-    extract_paper_citations
   end
 
   #-- get interesting metatag content
@@ -90,7 +95,6 @@ class SSRNAbstractPage
       @online_date = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
       @pub_date = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
       @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
-      @paper_url =@doc.at_xpath("//meta[@name='citation_pdf_url']")["content"]
       @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
   end
 
@@ -134,9 +138,52 @@ class SSRNAbstractPage
     end
   end
 
+  def scrape_pdf_url
+    @pdf_url = 'http://poseidon01.ssrn.com/' + @doc.at_xpath("//a[@class='downloadBt']")["href"]
+  end
+
   def extract_paper_citations
-    fullpaper = SSRNPaper.new(@paper_url)
-    @extracted_citations = fullpaper.extract_citations
+    # make a one-time temporary directory
+    stashdir = Dir.mktmpdir
+
+    # get SSRN credential
+  #  c= Curl::Easy.perform(SSRN_LOGIN_AJAX)
+
+  #  cred = c.body_str
+
+    # use browser to get the file
+    # set up a browser simulator
+    profile = Selenium::WebDriver::Firefox::Profile.new
+    profile['browser.download.folderList'] = 2 #specifies custom location
+    profile['browser.download.dir'] = "#{stashdir}"
+    profile['browser.helperApps.neverAsk.saveToDisk'] = "application/pdf,application/x-pdf,application/octet-stream"
+    headless = Headless.new
+    headless.start
+    b = Watir::Browser.new :firefox, :profile => profile
+    # go through signin procedure
+
+    b.goto SSRN_LOGIN_AJAX
+    b.goto @url
+    # grab the PDF file
+    b.link(:class,"downloadBt").click
+    # wait for DL to complete
+    myfile = Dir.entries("#{stashdir}").grep(/^SSRN/).first()
+    while  File.exist?("#{stashdir}/#{myfile}.part")
+      sleep(1)
+    end
+    # kill off the browser simulator
+
+    b.close
+    headless.destroy
+    # send the file to citationer
+
+    # process json from citationer
+    c = Curl::Easy.new(CITATIONER_URI)
+    c.multipart_form_post = true
+    c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
+    jsn = c.body_str
+    puts "#{jsn}"
+    # kill the file and the directory
   end
 
   def create_triples
@@ -167,24 +214,17 @@ Download rank: #{@dl_rank}
 end
 
 class SSRNPaper
-  def initialize(paper_url)
+  def initialize(dl_url)
     # could be HTML, PDF, pretty much anything
-    @uri = URI.new(paper_url)
+    @url = dl_url
     @citation_list = Array.new
   end
 
   #-- pull out citations using LII Citationer service
   def extract_citations
+    c= Curl::Easy.perform(@url)
     postfile = Tempfile.new('clsauthor')
-    Net::HTTP.start(@uri.host,@uri.port) do |http|
-      request = Net::HTTP::Get.new @uri
-      http.request request do |response|
-        response.read_body do |chunk|
-          postfile.write chunk
-        end
-      end
-    end
-
+    postfile.write(c.body_str)
     postfile.close
 
     c = Curl::Easy.new(CITATIONER_URI)
@@ -357,25 +397,28 @@ class CLSAuthorSpreadsheet
   end
 end
 
+class CLSAuthorController
+  def initialize
+    @whatever = 1
 
-# pseudocode
-# check to see if we're printing out triples or updating the endpoint
-# get a list of author objects from the spreadsheet
-# emit the author triples however
-# for each author, get the papers
-# emit the paper triples however
+  end
+  def test_abstract_page
+    pg = SSRNAbstractPage.new('2218855','489995')
+    pg.scrape
+    pg.extract_paper_citations
+    puts "#{pg}"
+  end
+  def test_paperlist
+    pg = SSRNAuthorPage.new('45120')
+    pg.scrape
+    puts "#{pg}"
+  end
+  def test_spreadsheet
+    sheet = CLSAuthorSpreadsheet.new()
+    stuff = sheet.to_s
+    puts "#{stuff}"
+  end
+end
 
-# page/paperlist test
-#pg = SSRNAuthorPage.new('45120')
-#pg.scrape
-#puts "#{pg}"
-
-# abstract page test
-pg = SSRNAbstractPage.new('2218855','489995')
-pg.scrape
-puts "#{pg}"
-
-# spreadsheet test
-#sheet = CLSAuthorSpreadsheet.new()
-#stuff = sheet.to_s
-#puts "#{stuff}"
+control = CLSAuthorController.new()
+control.test_abstract_page
