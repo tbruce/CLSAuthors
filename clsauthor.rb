@@ -176,8 +176,8 @@ class SSRNAbstractPage
     while  File.exist?("#{stashdir}/#{myfile}.part")
       sleep(1)
     end
-    # kill off the browser simulator
 
+    # kill off the browser simulator
     b.close
     headless.destroy
     # send the file to citationer
@@ -206,24 +206,25 @@ class SSRNAbstractPage
 
   def create_citation_triples(cite_json)
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
+    puri = RDF::URI(@paper_URI)
     RDF::Writer.open(CLS_CITED_TRIPLE_FILE) do |writer|
       writer << RDF::Graph.new do |graph|
         key, ary = JSON.parse(cite_json).first()
         ary.each do |mention|
           case mention['form']
             when 'cfr'
-              thisuri = 'liicfr:' + mention['cite'].gsub(/\s+/,'_')
-              graph << [@paper_URI, clsauthor.refCFR,"#{thisuri}"]
+              thisuri = RDF::URI('liicfr:' + mention['cite'].gsub(/\s+/,'_'))
+              graph << [puri, clsauthor.refCFR,thisuri]
             when 'usc'
-              thisuri = 'liiuscode:' + mention['cite'].gsub(/\s+/,'_')
-              graph << [@paper_URI, clsauthor.refUSCode,"#{thisuri}"]
+              thisuri = RDF::URI('liiuscode:' + mention['cite'].gsub(/\s+/,'_'))
+              graph << [puri, clsauthor.refUSCode,thisuri]
             when 'statl'
-              thisuri = 'liistat:' + mention['cite'].gsub(/\s+/,'_')
-              graph << [@paper_URI, clsauthor.refStatL,"#{thisuri}"]
+              thisuri = RDF::URI('liistat:' + mention['cite'].gsub(/\s+/,'_'))
+              graph << [puri, clsauthor.refStatL,thisuri]
             when 'scotus'
-              thisuri = 'liiscotus:' + mention['cite'].gsub(/\s+/,'_')
-              graph << [@paper_URI, clsauthor.refStatL,"#{thisuri}"]
-              graph << [@paper_URI, clsauthor.citedPage, "#{mention['url']}"]
+              thisuri = RDF::URI('liiscotus:' + mention['cite'].gsub(/\s+/,'_'))
+              graph << [puri, clsauthor.refStatL,thisuri]
+              graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
             when 'topn'
               # look up dbPedia entry
               looker = DBPEDIA_LOOKUP_PREFIX + "#{CGI::escape(mention['cite'])}"
@@ -231,23 +232,18 @@ class SSRNAbstractPage
                 c.headers['Accept'] = 'application/json'
               end
               JSON.parse(c.body_str)['results'].each do |entry|
-                graph << [@paper_URI, clsauthor.refDBPedia,"#{entry['uri']}"]
+                graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]
               end
-              thisuri = 'liitopn:' + mention['cite'].downcase.gsub(/\s+/,'_')
-              graph << [@paper_URI, clsauthor.refPopName,"#{thisuri}"]
+              thisuri = RDF::URI('liitopn:' + mention['cite'].downcase.gsub(/\s+/,'_'))
+              graph << [puri, clsauthor.refPopName,thisuri]
             else
-              graph << [@paper_URI, clsauthor.citedPage, "#{mention['url']}"]
+              graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
           end
         end
       end
     end
 
   end
-
-  #trivial change to allow commit -- and another
-  def emit_triples
-  end
-
 
 #-- override to_s, mostly for debugging purposes
   def to_s
@@ -336,8 +332,12 @@ class CLSAuthor
 
   #-- create triples for everything we know about the author
   def create_triples
-
-
+    myuri == RDF::URI(@liiScholarID)
+    RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
+      writer << RDF::Graph.new do |graph|
+        graph << [myuri,,]
+      end
+    end
   end
   #-- incomplete string output for testing
   def to_s
@@ -357,6 +357,7 @@ class CLSAuthorSpreadsheet
   attr_reader :author_list
 
   # this badly needs exception-handling
+  # opens the author-info spreadsheet using Google Drive
   def initialize
     session = GoogleDrive.login(GOOGLE_UID,GOOGLE_PWD)
     @ws = session.spreadsheet_by_key(GOOGLE_SPREADSHEET_KEY).worksheets[0]

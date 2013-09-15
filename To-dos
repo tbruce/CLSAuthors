@@ -1,1 +1,13 @@
+Fixing
+-- truncate subsection references from citationer results
+-- look at named legislation matching in DBPedia, find a better way
+
+
+Testing
+-- find example paper with scotus citations
+
+
+Someday
+
+ -- add Federal agency name extraction to PDFs
  -- can leverage "people who downloaded this also downloaded" feature of paper abstracts
