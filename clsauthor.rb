@@ -5,7 +5,12 @@
 #    listed on a single page, no matter how many there are.
 
 
-CLS_TRIPLE_FILE=''
+
+
+CLS_AUTHOR_TRIPLE_FILE='/tmp/clsauthor.authors.nt'
+CLS_PAPER_TRIPLE_FILE='/tmp/clsauthor.papers.nt'
+CLS_CITED_TRIPLE_FILE='/tmp/clsauthor.cited.nt'
+CLS_VOCABULARY='http://www.semanticweb.org/tom/ontologies/2013/7/liischolar-try2/'
 
 # SSRN-related config information
 
@@ -21,7 +26,10 @@ GOOGLE_UID='access.lii.cornell@gmail.com'
 GOOGLE_PWD='crankmaster'
 GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
 
+
+# services
 CITATIONER_URI='http://mojo.law.cornell.edu/services/citationer/'
+DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search/PrefixSearch?QueryClass=&MaxHits=5&QueryString='
 
 require 'rubygems'
 require 'net/http'
@@ -33,6 +41,10 @@ require 'tempfile'
 require 'curb'
 require 'watir-webdriver'
 require 'headless'
+require 'json'
+require 'rdf'
+require 'rdf/ntriples'
+
 
 #-- class for representing/modeling SSRN abstract pages
 
@@ -53,7 +65,6 @@ class SSRNAbstractPage
     @pub_date = nil
     @doi = nil
     @title = nil
-    @pdf_url = nil
     @abstract_views = nil
     @paper_dls = nil
     @paper_citations = nil
@@ -138,20 +149,10 @@ class SSRNAbstractPage
     end
   end
 
-  def scrape_pdf_url
-    @pdf_url = 'http://poseidon01.ssrn.com/' + @doc.at_xpath("//a[@class='downloadBt']")["href"]
-  end
 
   def extract_paper_citations
     # make a one-time temporary directory
     stashdir = Dir.mktmpdir
-
-    # get SSRN credential
-  #  c= Curl::Easy.perform(SSRN_LOGIN_AJAX)
-
-  #  cred = c.body_str
-
-    # use browser to get the file
     # set up a browser simulator
     profile = Selenium::WebDriver::Firefox::Profile.new
     profile['browser.download.folderList'] = 2 #specifies custom location
@@ -160,12 +161,16 @@ class SSRNAbstractPage
     headless = Headless.new
     headless.start
     b = Watir::Browser.new :firefox, :profile => profile
-    # go through signin procedure
 
+    # go through signin procedure
     b.goto SSRN_LOGIN_AJAX
     b.goto @url
     # grab the PDF file
     b.link(:class,"downloadBt").click
+    # wait for DL to start
+    while Dir.entries("#{stashdir}").length < 3
+      sleep(1)
+    end
     # wait for DL to complete
     myfile = Dir.entries("#{stashdir}").grep(/^SSRN/).first()
     while  File.exist?("#{stashdir}/#{myfile}.part")
@@ -181,12 +186,66 @@ class SSRNAbstractPage
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
     c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
-    jsn = c.body_str
-    puts "#{jsn}"
+    cite_json = c.body_str
     # kill the file and the directory
+    File.unlink("#{stashdir}/#{myfile}")
+    Dir.unlink("#{stashdir}")
+    create_citation_triples(cite_json)
   end
 
-  def create_triples
+  # creates citation triples given json output from citationer
+  # this creates triples using the following properties.
+  # These take LII-minted URIs:
+  # refCFR
+  # refPopName
+  # refUSCode
+  # This takes a dbPedia URI
+  # refDBPedia (based on popular name of act, and maybe on citation)
+  # These take URLs for which there are no URIs
+  # citedPage
+
+  def create_citation_triples(cite_json)
+    clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
+    RDF::Writer.open(CLS_CITED_TRIPLE_FILE) do |writer|
+      writer << RDF::Graph.new do |graph|
+        key, ary = JSON.parse(cite_json).first()
+        ary.each do |mention|
+          case mention['form']
+            when 'cfr'
+              thisuri = 'liicfr:' + mention['cite'].gsub(/\s+/,'_')
+              graph << [@paper_URI, clsauthor.refCFR,"#{thisuri}"]
+            when 'usc'
+              thisuri = 'liiuscode:' + mention['cite'].gsub(/\s+/,'_')
+              graph << [@paper_URI, clsauthor.refUSCode,"#{thisuri}"]
+            when 'statl'
+              thisuri = 'liistat:' + mention['cite'].gsub(/\s+/,'_')
+              graph << [@paper_URI, clsauthor.refStatL,"#{thisuri}"]
+            when 'scotus'
+              thisuri = 'liiscotus:' + mention['cite'].gsub(/\s+/,'_')
+              graph << [@paper_URI, clsauthor.refStatL,"#{thisuri}"]
+              graph << [@paper_URI, clsauthor.citedPage, "#{mention['url']}"]
+            when 'topn'
+              # look up dbPedia entry
+              looker = DBPEDIA_LOOKUP_PREFIX + "#{CGI::escape(mention['cite'])}"
+              c = Curl.get(looker) do |c|
+                c.headers['Accept'] = 'application/json'
+              end
+              JSON.parse(c.body_str)['results'].each do |entry|
+                graph << [@paper_URI, clsauthor.refDBPedia,"#{entry['uri']}"]
+              end
+              thisuri = 'liitopn:' + mention['cite'].downcase.gsub(/\s+/,'_')
+              graph << [@paper_URI, clsauthor.refPopName,"#{thisuri}"]
+            else
+              graph << [@paper_URI, clsauthor.citedPage, "#{mention['url']}"]
+          end
+        end
+      end
+    end
+
+  end
+
+
+  def emit_triples
   end
 
 
@@ -210,32 +269,7 @@ Citations: #{@paper_citations}
 Footnotes: #{@paper_footnotes}
 Download rank: #{@dl_rank}
     eos
-  end
-end
-
-class SSRNPaper
-  def initialize(dl_url)
-    # could be HTML, PDF, pretty much anything
-    @url = dl_url
-    @citation_list = Array.new
-  end
-
-  #-- pull out citations using LII Citationer service
-  def extract_citations
-    c= Curl::Easy.perform(@url)
-    postfile = Tempfile.new('clsauthor')
-    postfile.write(c.body_str)
-    postfile.close
-
-    c = Curl::Easy.new(CITATIONER_URI)
-    c.multipart_form_post = true
-    c.http_post(Curl::PostField.file('files',postfile.path))
-    jsn = c.body_str
-    puts "#{jsn}"
-    return @citation_list
-  end
-  def create_triples
-
+    return strang
   end
 end
 
@@ -400,7 +434,6 @@ end
 class CLSAuthorController
   def initialize
     @whatever = 1
-
   end
   def test_abstract_page
     pg = SSRNAbstractPage.new('2218855','489995')
