@@ -244,7 +244,7 @@ class SSRNAbstractPage
 
   end
 
-
+  #trivial change to allow commit
   def emit_triples
   end
 
