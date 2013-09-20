@@ -325,17 +325,38 @@ class CLSAuthor
   # in a vain attempt to avoid confusion
   attr_accessor :birthday,:dateOfDeath,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
   attr_accessor :openGraphID, :orcidID, :ssrnAuthorID, :worldCatID, :clsBio, :linkedInProfile, :homepage
-  attr_accessor :viafID, :crossRefID
+  attr_accessor :viafID, :crossRefID, :bePressID, :dbPediaID
   def initialize(author_uri)
     @liiScholarID = author_uri
+    @birthday,@dateOfDeath,@firstName,@middleName,@lastName,@gPlusID,@gScholarID = (0..6).map{nil}
+    @openGraphID,@orcidID,@ssrnAuthorID,@worldCatID,@clsBio,@linkedInProfile,@homepage = (0..6).map{nil}
+    @viafID,@crossRefID,@bePressID,@dbPediaID = (0..3).map{nil}
   end
 
   #-- create triples for everything we know about the author
   def create_triples
+    clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     myuri == RDF::URI(@liiScholarID)
     RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
       writer << RDF::Graph.new do |graph|
-        graph << [myuri,,]
+        graph << [myuri,,@birthday]  if @birthday
+        graph << [myuri,,@dateOfDeath] if @dateOfDeath
+        graph << [myuri,,@firstName]  if @firstName
+        graph << [myuri,,@middleName] if @middleName
+        graph << [myuri,,@lastName] if @lastName
+        graph << [myuri,,@gPlusID] if @gPlusID
+        graph << [myuri,,@gScholarID] if @gScholarID
+        graph << [myuri,,@openGraphID] if @openGraphID
+        graph << [myuri,,@orcidID] if @orcidID
+        graph << [myuri,,@ssrnAuthorID] if @ssrnAuthorID
+        graph << [myuri,,@worldCatID] if @worldCatID
+        graph << [myuri,,@clsBio] if @clsBio
+        graph << [myuri,,@linkedInProfile] if @linkedInProfile
+        graph << [myuri,,@homepage] if @homepage
+        graph << [myuri,,@viafID] if @viafID
+        graph << [myuri,,@crossRefID] if @crossRefID
+        graph << [myuri,,@bePressID] if @bePressID
+        graph << [myuri,,@dbPediaID] if @dbPediaID
       end
     end
   end
@@ -356,7 +377,7 @@ end
 class CLSAuthorSpreadsheet
   attr_reader :author_list
 
-  # this badly needs exception-handling
+  #TODO: this badly needs exception-handling
   # opens the author-info spreadsheet using Google Drive
   def initialize
     session = GoogleDrive.login(GOOGLE_UID,GOOGLE_PWD)
@@ -380,6 +401,7 @@ class CLSAuthorSpreadsheet
   end
 
   # populates a single author entry
+  # TODO -- find out what this does with null/empty values
   def populate_author(row, author)
     author.birthday= @ws[row,@colnames.index("Birthdate")+1]
     author.dateOfDeath= @ws[row,@colnames.index("DeathDate")+1]
@@ -398,6 +420,8 @@ class CLSAuthorSpreadsheet
     author.homepage= @ws[row,@colnames.index("Homepage")+1]
     author.viafID= @ws[row,@colnames.index("viafID")+1]
     author.crossRefID= @ws[row,@colnames.index("crossRefID")+1]
+    author.bePressID = @ws[row,@colnames.index("bePressID")+1]
+    author.dbPediaID = @ws[row,@colnames.index("dbPediaID")+1]
   end
 
   def process_papers
