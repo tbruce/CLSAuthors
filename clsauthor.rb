@@ -321,7 +321,7 @@ end
 
 
 class CLSAuthor
-  # these variables don't follow ruby conventions -- they're named to correspond to properties in the data model
+  # these variables don't follow ruby conventions --  they're named to correspond to properties in the data model
   # in a vain attempt to avoid confusion
   attr_accessor :birthday,:dateOfDeath,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
   attr_accessor :openGraphID, :orcidID, :ssrnAuthorID, :worldCatID, :clsBio, :linkedInProfile, :homepage
