@@ -6,11 +6,19 @@
 
 
 
+# file naming conventions
+# TODO: set up commandline option handling for this
 
 CLS_AUTHOR_TRIPLE_FILE='/tmp/clsauthor.authors.nt'
 CLS_PAPER_TRIPLE_FILE='/tmp/clsauthor.papers.nt'
 CLS_CITED_TRIPLE_FILE='/tmp/clsauthor.cited.nt'
+
+# location of vocabularies that are not built into RDF::Writer
+# these MUST have terminal slashes
+# TODO: add JELS vocab
+
 CLS_VOCABULARY='http://www.semanticweb.org/tom/ontologies/2013/7/liischolar-try2/'
+BIBO_VOCABULARY='http://purl.org/ontology/bibo/'
 
 # SSRN-related config information
 
@@ -19,13 +27,13 @@ SSRN_ACCOUNT_PWD='gruel07'
 SSRN_LOGIN_AJAX = 'http://www.ssrn.com/loginAjaxHeader.cfm?login=true&username=' + SSRN_ACCOUNT_NAME + '&pass=' + SSRN_ACCOUNT_PWD
 SSRN_AUTHOR_PREFIX='http://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id='
 SSRN_ABSTRACT_PREFIX='http://papers.ssrn.com/sol3/papers.cfm?abstract_id='
-LII_SSRN_URI_PREFIX='http://liicornell.org/ssrn/papers/'
+LII_SSRN_PAPER_URI_PREFIX='http://liicornell.org/ssrn/papers/'
+LII_SSRN_AUTHOR_URI_PREFIX='http://liicornell.org/ssrn/authors/'
 
-# google related config information
+# Google spreadsheet used for configuration, and access info for it.
 GOOGLE_UID='access.lii.cornell@gmail.com'
 GOOGLE_PWD='crankmaster'
 GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
-
 
 # services
 CITATIONER_URI='http://mojo.law.cornell.edu/services/citationer/'
@@ -44,6 +52,7 @@ require 'headless'
 require 'json'
 require 'rdf'
 require 'rdf/ntriples'
+include RDF
 
 
 #-- class for representing/modeling SSRN abstract pages
@@ -55,7 +64,8 @@ class SSRNAbstractPage
     @paper_id = my_id
     @author_id = my_ssrn_author_id
     @url = SSRN_ABSTRACT_PREFIX + my_id
-    @paper_URI = LII_SSRN_URI_PREFIX + my_id
+    @paper_URI = LII_SSRN_PAPER_URI_PREFIX + my_id
+    @cls_author_id = LII_SSRN_AUTHOR_URI_PREFIX + my_ssrn_author_id
 
     @keywords = Array.new()
     @jelcodes = Array.new()
@@ -149,6 +159,39 @@ class SSRNAbstractPage
     end
   end
 
+  #-- create triples for everything we know about the author
+  def create_triples
+    clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
+    bibo = RDF::Vocabulary.new(BIBO_VOCABULARY)
+    myuri = RDF::URI(@paper_URI)
+    RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
+      writer << RDF::Graph.new do |graph|
+        graph << [myuri, DC.contributor, RDF::URI(@cls_author_id)]
+        graph << [myuri,RDF.type,bibo.Article]
+        graph << [myuri,clsauthor.abstractPage,@url]
+        graph << [myuri,DC.abstract,@abstract] if @abstract
+        graph << [myuri,clsauthor.ssrnOnlineDate,@online_date] if @online_date
+        graph << [myuri,clsauthor.ssrnPubDate,@pub_date] if @pub_date
+        graph << [myuri,bibo.doi,@doi] if @doi
+        graph << [myuri,DC.title,@title] if @title
+        graph << [myuri,clsauthor.ssrnAbsViewCount,@abstract_views] if @abstract_views
+        graph << [myuri,clsauthor.ssrnDLCount, @paper_dls] if @paper_dls
+        graph << [myuri,clsauthor.ssrnCitationCount,@paper_citations] if @paper_citations
+        graph << [myuri,clsauthor.ssrnFNCount,@paper_citations] if @paper_citations
+        graph << [myuri, clsauthor.ssrnDLRank,@dl_rank] if @dl_rank
+        @keywords.each do |subj|
+          graph << [myuri,DC.subject, subj]
+        end
+        @jelcodes.each do |jel|
+          graph << [myuri,clsauthor.jelClass,jel]
+        end
+        @coauthors.each do |scribbler|
+          scribURI = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + scribbler)
+          graph << [myuri, DC.contributor, scribURI]
+        end
+      end
+    end
+  end
 
   def extract_paper_citations
     # make a one-time temporary directory
@@ -323,41 +366,41 @@ end
 class CLSAuthor
   # these variables don't follow ruby conventions --  they're named to correspond to properties in the data model
   # in a vain attempt to avoid confusion
-  attr_accessor :birthday,:dateOfDeath,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
+  attr_accessor :birthYear,:deathYear,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
   attr_accessor :openGraphID, :orcidID, :ssrnAuthorID, :worldCatID, :clsBio, :linkedInProfile, :homepage
   attr_accessor :viafID, :crossRefID, :bePressID, :dbPediaID
   def initialize(author_uri)
     @liiScholarID = author_uri
-    @birthday,@dateOfDeath,@firstName,@middleName,@lastName,@gPlusID,@gScholarID = (0..6).map{nil}
+    @birthYear,@deathYear,@firstName,@middleName,@lastName,@gPlusID,@gScholarID = (0..6).map{nil}
     @openGraphID,@orcidID,@ssrnAuthorID,@worldCatID,@clsBio,@linkedInProfile,@homepage = (0..6).map{nil}
     @viafID,@crossRefID,@bePressID,@dbPediaID = (0..3).map{nil}
   end
 
   #-- create triples for everything we know about the author
-  def create_triples
-    clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
-    myuri == RDF::URI(@liiScholarID)
-    RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
-      writer << RDF::Graph.new do |graph|
-        graph << [myuri,,@birthday]  if @birthday
-        graph << [myuri,,@dateOfDeath] if @dateOfDeath
-        graph << [myuri,,@firstName]  if @firstName
-        graph << [myuri,,@middleName] if @middleName
-        graph << [myuri,,@lastName] if @lastName
-        graph << [myuri,,@gPlusID] if @gPlusID
-        graph << [myuri,,@gScholarID] if @gScholarID
-        graph << [myuri,,@openGraphID] if @openGraphID
-        graph << [myuri,,@orcidID] if @orcidID
-        graph << [myuri,,@ssrnAuthorID] if @ssrnAuthorID
-        graph << [myuri,,@worldCatID] if @worldCatID
-        graph << [myuri,,@clsBio] if @clsBio
-        graph << [myuri,,@linkedInProfile] if @linkedInProfile
-        graph << [myuri,,@homepage] if @homepage
-        graph << [myuri,,@viafID] if @viafID
-        graph << [myuri,,@crossRefID] if @crossRefID
-        graph << [myuri,,@bePressID] if @bePressID
-        graph << [myuri,,@dbPediaID] if @dbPediaID
-      end
+  def create_triples(writer,clsauthor)
+    myuri = RDF::URI(@liiScholarID)
+    myssrnuri = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + @ssrnAuthorID)
+    writer << RDF::Graph.new do |graph|
+      graph << [myuri,RDF.type, FOAF.Person]
+      graph << [myuri,OWL.sameAs,myssrnuri]
+      graph << [myuri,clsauthor.birthYear,@birthYear]  unless @birthYear.empty?
+      graph << [myuri,clsauthor.deathYear,@deathYear] unless @deathYear.empty?
+      graph << [myuri,FOAF.givenName,@firstName]  unless @firstName.empty?
+      graph << [myuri,clsauthor.middlename,@middleName] unless @middleName.empty?
+      graph << [myuri,FOAF.familyName,@lastName] unless @lastName.empty?
+      graph << [myuri,clsauthor.gPlusID,@gPlusID] unless @gPlusID.empty?
+      graph << [myuri,clsauthor.gScholarID,@gScholarID] unless @gScholarID.empty?
+      graph << [myuri,clsauthor.openGraphID,@openGraphID] unless @openGraphID.empty?
+      graph << [myuri,clsauthor.orcID,@orcidID] unless @orcidID.empty?
+      graph << [myuri,clsauthor.ssrnAuthorID,@ssrnAuthorID] unless @ssrnAuthorID.empty?
+      graph << [myuri,OWL.sameAs,RDF::URI(@worldCatID)] unless @worldCatID.empty?
+      graph << [myuri,clsauthor.institutionBio,@clsBio] unless @clsBio.empty?
+      graph << [myuri,clsauthor.linkedInProfile,@linkedInProfile] unless @linkedInProfile.empty?
+      graph << [myuri,FOAF.homepage,@homepage] unless @homepage.empty?
+      graph << [myuri,OWL.sameAs,RDF::URI(@viafID)] unless @viafID.empty?
+      graph << [myuri,clsauthor.crossRefID,@crossRefID] unless @crossRefID.empty?
+      graph << [myuri,OWL.sameAs,RDF::URI(@bePressID)] unless @bePressID.empty?
+      graph << [myuri,OWL.sameAs,RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
     end
   end
   #-- incomplete string output for testing
@@ -394,17 +437,19 @@ class CLSAuthorSpreadsheet
     uricol = @colnames.index("clsScholarID")+1
     for row in 2..@ws.num_rows()
       break if @ws[row,1] =~ /Note|Stop|(^\s+)/i  || @ws[row,1].empty?
-      author = CLSAuthor.new(@ws[row,uricol])
-      populate_author(row,author)
-      @author_list.push(author)
+      if (! @ws[row,uricol].empty?)
+        author = CLSAuthor.new(@ws[row,uricol])
+        populate_author(row,author)
+        @author_list.push(author)
+      end
     end
   end
 
   # populates a single author entry
   # TODO -- find out what this does with null/empty values
   def populate_author(row, author)
-    author.birthday= @ws[row,@colnames.index("Birthdate")+1]
-    author.dateOfDeath= @ws[row,@colnames.index("DeathDate")+1]
+    author.birthYear= @ws[row,@colnames.index("BirthYear")+1]
+    author.deathYear = @ws[row,@colnames.index("DeathYear")+1]
     author.firstName=  @ws[row,@colnames.index("First name")+1]
     author.lastName= @ws[row,@colnames.index("Last name")+1]
     author.middleName= @ws[row,@colnames.index("Middle name")+1]
@@ -415,7 +460,7 @@ class CLSAuthorSpreadsheet
     author.orcidID=@ws[row,@colnames.index("orcID")+1]
     author.ssrnAuthorID= @ws[row,@colnames.index("ssrnID")+1]
     author.worldCatID= @ws[row,@colnames.index("worldCatID")+1]
-    author.clsBio= @ws[row,@colnames.index("clsBioURL")+1]
+    author.clsBio= @ws[row,@colnames.index("institutionBioURL")+1]
     author.linkedInProfile= @ws[row,@colnames.index("linkedInProfile")+1]
     author.homepage= @ws[row,@colnames.index("Homepage")+1]
     author.viafID= @ws[row,@colnames.index("viafID")+1]
@@ -441,8 +486,11 @@ class CLSAuthorSpreadsheet
 
   #-- create triples calls create_triples for each author in the list
   def create_triples
-    @author_list.each do |author|
-      author.create_triples
+    clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
+    RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
+      @author_list.each do |author|
+        author.create_triples(writer,clsauthor)
+      end
     end
   end
 
@@ -456,13 +504,14 @@ class CLSAuthorSpreadsheet
   end
 end
 
-class CLSAuthorController
+class CLSAuthorRunner
   def initialize
     @whatever = 1
   end
   def test_abstract_page
     pg = SSRNAbstractPage.new('2218855','489995')
     pg.scrape
+    pg.create_triples
     pg.extract_paper_citations
     puts "#{pg}"
   end
@@ -473,10 +522,11 @@ class CLSAuthorController
   end
   def test_spreadsheet
     sheet = CLSAuthorSpreadsheet.new()
+    sheet.create_triples
     stuff = sheet.to_s
     puts "#{stuff}"
   end
 end
 
-control = CLSAuthorController.new()
-control.test_abstract_page
+control = CLSAuthorRunner.new()
+control.test_spreadsheet
