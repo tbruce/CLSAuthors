@@ -17,7 +17,7 @@ CLS_CITED_TRIPLE_FILE='/tmp/clsauthor.cited.nt'
 # these MUST have terminal slashes
 # TODO: add JELS vocab
 
-CLS_VOCABULARY='http://www.semanticweb.org/tom/ontologies/2013/7/liischolar-try2/'
+CLS_VOCABULARY='http://liicornell.org/liischolar/'
 BIBO_VOCABULARY='http://purl.org/ontology/bibo/'
 
 # SSRN-related config information
@@ -246,7 +246,7 @@ class SSRNAbstractPage
   # refDBPedia (based on popular name of act, and maybe on citation)
   # These take URLs for which there are no URIs
   # citedPage
-
+  # TODO: adjust URIs to fully-qualified LII prefixes
   def create_citation_triples(cite_json)
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     puri = RDF::URI(@paper_URI)
@@ -353,6 +353,13 @@ class SSRNAuthorPage
       abstract.create_triples
     end
   end
+
+  def process_paper_citations
+      @abstractlist.each do |absnum|
+        abstract =  SSRNAbstractPage.new(absnum, @ssrn_id)
+        abstract.extract_paper_citations
+      end
+    end
 
   #-- override to_s for diagnostic purposes
   def to_s
@@ -473,6 +480,7 @@ class CLSAuthorSpreadsheet
     @author_list.each do |author|
       next if author.ssrnAuthorID.empty?
       page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      page.scrape
       page.process_abstracts
     end
   end
@@ -526,7 +534,12 @@ class CLSAuthorRunner
     stuff = sheet.to_s
     puts "#{stuff}"
   end
+  def run_authors_papers_no_citations
+    sheet = CLSAuthorSpreadsheet.new()
+    sheet.create_triples
+    sheet.process_papers
+  end
 end
 
 control = CLSAuthorRunner.new()
-control.test_spreadsheet
+control.run_authors_papers_no_citations
