@@ -6,12 +6,7 @@
 
 
 
-# file naming conventions
-# TODO: set up commandline option handling for this
 
-CLS_AUTHOR_TRIPLE_FILE='/tmp/clsauthor.authors.nt'
-CLS_PAPER_TRIPLE_FILE='/tmp/clsauthor.papers.nt'
-CLS_CITED_TRIPLE_FILE='/tmp/clsauthor.cited.nt'
 
 # location of vocabularies that are not built into RDF::Writer
 # these MUST have terminal slashes
@@ -50,9 +45,10 @@ require 'curb'
 require 'watir-webdriver'
 require 'headless'
 require 'json'
+require 'trollop'
 require 'rdf'
-require 'rdf/ntriples'
 include RDF
+require 'rdf/ntriples'
 
 
 #-- class for representing/modeling SSRN abstract pages
@@ -82,6 +78,8 @@ class SSRNAbstractPage
     @dl_rank = nil
     @extracted_citations = Array.new()
 
+    @doc = nil
+
     begin
       uri = URI(@url)
       html = Net::HTTP.get(uri)
@@ -103,6 +101,7 @@ class SSRNAbstractPage
 
   #-- scrape the contents of the page
   def scrape
+    return unless @doc
     scrape_metas
     scrape_stats
     scrape_authors
@@ -128,7 +127,7 @@ class SSRNAbstractPage
     end
     idx = 0
     @doc.css("span.statNumber").each do |stat|
-      num = stat.inner_text().gsub!(/[^0-9]/,'').to_i
+      num = stat.inner_text().gsub!(/[^0-9]/,'')
       @abstract_views = num if @labels[idx] =~ /Views/
       @paper_dls = num if @labels[idx] =~ /Downloads/
       @paper_citations = num if @labels[idx] =~ /Citations/
@@ -147,7 +146,9 @@ class SSRNAbstractPage
   end
 
   def scrape_abstract
-      @abstract = @doc.at_xpath("//div/div/div/font").inner_text()
+      elem = @doc.at_xpath("//div/div/div/font")
+      return unless elem
+      @abstract = elem.inner_text()
   end
 
   def scrape_jelcodes
@@ -164,7 +165,7 @@ class SSRNAbstractPage
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     bibo = RDF::Vocabulary.new(BIBO_VOCABULARY)
     myuri = RDF::URI(@paper_URI)
-    RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
+    RDF::Writer.for(:ntriples).new() do |writer|
       writer << RDF::Graph.new do |graph|
         graph << [myuri, DC.contributor, RDF::URI(@cls_author_id)]
         graph << [myuri,RDF.type,bibo.Article]
@@ -246,26 +247,26 @@ class SSRNAbstractPage
   # refDBPedia (based on popular name of act, and maybe on citation)
   # These take URLs for which there are no URIs
   # citedPage
-  # TODO: adjust URIs to fully-qualified LII prefixes
+
   def create_citation_triples(cite_json)
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     puri = RDF::URI(@paper_URI)
-    RDF::Writer.open(CLS_CITED_TRIPLE_FILE) do |writer|
+    RDF::Writer.new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
         key, ary = JSON.parse(cite_json).first()
         ary.each do |mention|
           case mention['form']
             when 'cfr'
-              thisuri = RDF::URI('liicfr:' + mention['cite'].gsub(/\s+/,'_'))
+              thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refCFR,thisuri]
             when 'usc'
-              thisuri = RDF::URI('liiuscode:' + mention['cite'].gsub(/\s+/,'_'))
+              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refUSCode,thisuri]
             when 'statl'
-              thisuri = RDF::URI('liistat:' + mention['cite'].gsub(/\s+/,'_'))
+              thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refStatL,thisuri]
             when 'scotus'
-              thisuri = RDF::URI('liiscotus:' + mention['cite'].gsub(/\s+/,'_'))
+              thisuri = RDF::URI('http://liicornell.org/liiscotus/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refStatL,thisuri]
               graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
             when 'topn'
@@ -277,7 +278,7 @@ class SSRNAbstractPage
               JSON.parse(c.body_str)['results'].each do |entry|
                 graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]
               end
-              thisuri = RDF::URI('liitopn:' + mention['cite'].downcase.gsub(/\s+/,'_'))
+              thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refPopName,thisuri]
             else
               graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
@@ -485,6 +486,15 @@ class CLSAuthorSpreadsheet
     end
   end
 
+  def process_extract_citations
+    @author_list.each do |author|
+      next if author.ssrnAuthorID.empty?
+      page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      page.scrape
+      page.process_paper_citations
+    end
+  end
+
   # populates list of column names
   def get_colnames
     for col in 1..@ws.num_cols()
@@ -495,7 +505,7 @@ class CLSAuthorSpreadsheet
   #-- create triples calls create_triples for each author in the list
   def create_triples
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
-    RDF::Writer.open(CLS_AUTHOR_TRIPLE_FILE) do |writer|
+    RDF::Writer.new($stdout) do |writer|
       @author_list.each do |author|
         author.create_triples(writer,clsauthor)
       end
@@ -512,9 +522,23 @@ class CLSAuthorSpreadsheet
   end
 end
 
+
+# show-running class
+# TODO: set up for command line options
+# output of everything currently goes to stdout
+
 class CLSAuthorRunner
-  def initialize
-    @whatever = 1
+  def initialize (opt_hash)
+    @opts =opt_hash
+    @sheet = CLSAuthorSpreadsheet.new()
+  end
+  def run
+    run_authors if @opts.author
+    run_papers if @opts.abstracts
+    run_authors_papers_with_citations if @opts.cited
+    test_abstract_page if @opts.test_abstract
+    test_paperlist if @opts.test_author
+    test_spreadsheet if @opts.test_spreadsheet
   end
   def test_abstract_page
     pg = SSRNAbstractPage.new('2218855','489995')
@@ -534,12 +558,32 @@ class CLSAuthorRunner
     stuff = sheet.to_s
     puts "#{stuff}"
   end
-  def run_authors_papers_no_citations
-    sheet = CLSAuthorSpreadsheet.new()
-    sheet.create_triples
-    sheet.process_papers
+  def run_authors
+    @sheet.create_triples
+  end
+  def run_papers
+    @sheet.process_papers
+  end
+  def run_authors_papers_with_citations
+     @sheet.process_extract_citations
   end
 end
 
-control = CLSAuthorRunner.new()
-control.run_authors_papers_no_citations
+opts = Trollop::options do
+  banner <<-EOBANNER
+clsauthor generates triples for legal scholarship. See program header for explanations.
+Output is sent to stdout, and can be redirected into a file.
+
+Usage:
+    clsauthor.rb [options]
+where options are:
+EOBANNER
+  opt :authors, "Generate triples for authors"
+  opt :abstracts, "Generate triples for paper metadata"
+  opt :cited, "Generate triples for primary law cited in papers"
+  opt :test_abstract, "Run scrape test for a single abstract"
+  opt :test_author, "Run scrape test for a single author's papers"
+  opt :test_spreadsheet, "Run spreadsheet dump"
+end
+control = CLSAuthorRunner.new(opts)
+control.run
