@@ -115,6 +115,7 @@ class SSRNAbstractPage
       @online_date = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
       @pub_date = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
       @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
+      @doi = nil if @doi && @doi.empty?     #for unknown reasons this sometimes pulls a blank
       @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
   end
 
@@ -251,7 +252,7 @@ class SSRNAbstractPage
   def create_citation_triples(cite_json)
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     puri = RDF::URI(@paper_URI)
-    RDF::Writer.new($stdout) do |writer|
+    RDF::Writer.for(:ntriples).new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
         key, ary = JSON.parse(cite_json).first()
         ary.each do |mention|
@@ -385,30 +386,32 @@ class CLSAuthor
   end
 
   #-- create triples for everything we know about the author
-  def create_triples(writer,clsauthor)
+  def create_triples(clsauthor)
     myuri = RDF::URI(@liiScholarID)
     myssrnuri = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + @ssrnAuthorID)
-    writer << RDF::Graph.new do |graph|
-      graph << [myuri,RDF.type, FOAF.Person]
-      graph << [myuri,OWL.sameAs,myssrnuri]
-      graph << [myuri,clsauthor.birthYear,@birthYear]  unless @birthYear.empty?
-      graph << [myuri,clsauthor.deathYear,@deathYear] unless @deathYear.empty?
-      graph << [myuri,FOAF.givenName,@firstName]  unless @firstName.empty?
-      graph << [myuri,clsauthor.middlename,@middleName] unless @middleName.empty?
-      graph << [myuri,FOAF.familyName,@lastName] unless @lastName.empty?
-      graph << [myuri,clsauthor.gPlusID,@gPlusID] unless @gPlusID.empty?
-      graph << [myuri,clsauthor.gScholarID,@gScholarID] unless @gScholarID.empty?
-      graph << [myuri,clsauthor.openGraphID,@openGraphID] unless @openGraphID.empty?
-      graph << [myuri,clsauthor.orcID,@orcidID] unless @orcidID.empty?
-      graph << [myuri,clsauthor.ssrnAuthorID,@ssrnAuthorID] unless @ssrnAuthorID.empty?
-      graph << [myuri,OWL.sameAs,RDF::URI(@worldCatID)] unless @worldCatID.empty?
-      graph << [myuri,clsauthor.institutionBio,@clsBio] unless @clsBio.empty?
-      graph << [myuri,clsauthor.linkedInProfile,@linkedInProfile] unless @linkedInProfile.empty?
-      graph << [myuri,FOAF.homepage,@homepage] unless @homepage.empty?
-      graph << [myuri,OWL.sameAs,RDF::URI(@viafID)] unless @viafID.empty?
-      graph << [myuri,clsauthor.crossRefID,@crossRefID] unless @crossRefID.empty?
-      graph << [myuri,OWL.sameAs,RDF::URI(@bePressID)] unless @bePressID.empty?
-      graph << [myuri,OWL.sameAs,RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
+    RDF::Writer.for(:ntriples).new($stdout) do |writer|
+      writer << RDF::Graph.new do |graph|
+        graph << [myuri, RDF.type, FOAF.Person]
+        graph << [myuri, OWL.sameAs, myssrnuri] unless @ssrnAuthorID.empty?
+        graph << [myuri, clsauthor.birthYear, @birthYear] unless @birthYear.empty?
+        graph << [myuri, clsauthor.deathYear, @deathYear] unless @deathYear.empty?
+        graph << [myuri, FOAF.givenName, @firstName] unless @firstName.empty?
+        graph << [myuri, clsauthor.middlename, @middleName] unless @middleName.empty?
+        graph << [myuri, FOAF.familyName, @lastName] unless @lastName.empty?
+        graph << [myuri, clsauthor.gPlusID, @gPlusID] unless @gPlusID.empty?
+        graph << [myuri, clsauthor.gScholarID, @gScholarID] unless @gScholarID.empty?
+        graph << [myuri, clsauthor.openGraphID, @openGraphID] unless @openGraphID.empty?
+        graph << [myuri, clsauthor.orcID, @orcidID] unless @orcidID.empty?
+        graph << [myuri, clsauthor.ssrnAuthorID, @ssrnAuthorID] unless @ssrnAuthorID.empty?
+        graph << [myuri, OWL.sameAs, RDF::URI(@worldCatID)] unless @worldCatID.empty?
+        graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
+        graph << [myuri, clsauthor.linkedInProfile, @linkedInProfile] unless @linkedInProfile.empty?
+        graph << [myuri, FOAF.homepage, @homepage] unless @homepage.empty?
+        graph << [myuri, OWL.sameAs, RDF::URI(@viafID)] unless @viafID.empty?
+        graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
+        graph << [myuri, OWL.sameAs, RDF::URI(@bePressID)] unless @bePressID.empty?
+        graph << [myuri, OWL.sameAs, RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
+      end
     end
   end
   #-- incomplete string output for testing
@@ -505,10 +508,8 @@ class CLSAuthorSpreadsheet
   #-- create triples calls create_triples for each author in the list
   def create_triples
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
-    RDF::Writer.new($stdout) do |writer|
-      @author_list.each do |author|
-        author.create_triples(writer,clsauthor)
-      end
+    @author_list.each do |author|
+      author.create_triples(clsauthor)
     end
   end
 
@@ -533,7 +534,7 @@ class CLSAuthorRunner
     @sheet = CLSAuthorSpreadsheet.new()
   end
   def run
-    run_authors if @opts.author
+    run_authors if @opts.authors
     run_papers if @opts.abstracts
     run_authors_papers_with_citations if @opts.cited
     test_abstract_page if @opts.test_abstract
