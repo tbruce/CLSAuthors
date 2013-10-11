@@ -24,6 +24,10 @@ SSRN_AUTHOR_PREFIX='http://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id='
 SSRN_ABSTRACT_PREFIX='http://papers.ssrn.com/sol3/papers.cfm?abstract_id='
 LII_SSRN_PAPER_URI_PREFIX='http://liicornell.org/ssrn/papers/'
 LII_SSRN_AUTHOR_URI_PREFIX='http://liicornell.org/ssrn/authors/'
+LII_JEL_URI_PREFIX='http://liicornell.org/jel/'
+GPLUS_URI_PREFIX= 'https://plus.google.com/'
+GSCHOLAR_URI_PREFIX='http://scholar.google.com/citations/hl=en&user='
+OPENGRAPH_URI_PREFIX='http://graph.facebook.com/'
 
 # Google spreadsheet used for configuration, and access info for it.
 GOOGLE_UID='access.lii.cornell@gmail.com'
@@ -185,7 +189,8 @@ class SSRNAbstractPage
           graph << [myuri,DC.subject, subj]
         end
         @jelcodes.each do |jel|
-          graph << [myuri,clsauthor.jelClass,jel]
+          graph << [RDF::URI(LII_JEL_URI_PREFIX + jel), RDF.type, clsauthor.JelClass ]
+          graph << [myuri,clsauthor.jelClass, RDF::URI(LII_JEL_URI_PREFIX + jel)]
         end
         @coauthors.each do |scribbler|
           scribURI = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + scribbler)
@@ -377,7 +382,7 @@ class CLSAuthor
   # in a vain attempt to avoid confusion
   attr_accessor :birthYear,:deathYear,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
   attr_accessor :openGraphID, :orcidID, :ssrnAuthorID, :worldCatID, :clsBio, :linkedInProfile, :homepage
-  attr_accessor :viafID, :crossRefID, :bePressID, :dbPediaID
+  attr_accessor :viafID, :crossRefID, :bePressID, :dbPediaID , :freeBaseID
   def initialize(author_uri)
     @liiScholarID = author_uri
     @birthYear,@deathYear,@firstName,@middleName,@lastName,@gPlusID,@gScholarID = (0..6).map{nil}
@@ -391,26 +396,63 @@ class CLSAuthor
     myssrnuri = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + @ssrnAuthorID)
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
-        graph << [myuri, RDF.type, FOAF.Person]
+        graph << [myuri, RDF.type, clsauthor.CLSAuthor]
+        graph << [myssrnuri, RDF.type, clsauthor.SSRNAuthor ]
         graph << [myuri, OWL.sameAs, myssrnuri] unless @ssrnAuthorID.empty?
+
         graph << [myuri, clsauthor.birthYear, @birthYear] unless @birthYear.empty?
         graph << [myuri, clsauthor.deathYear, @deathYear] unless @deathYear.empty?
         graph << [myuri, FOAF.givenName, @firstName] unless @firstName.empty?
         graph << [myuri, clsauthor.middlename, @middleName] unless @middleName.empty?
         graph << [myuri, FOAF.familyName, @lastName] unless @lastName.empty?
-        graph << [myuri, clsauthor.gPlusID, @gPlusID] unless @gPlusID.empty?
-        graph << [myuri, clsauthor.gScholarID, @gScholarID] unless @gScholarID.empty?
-        graph << [myuri, clsauthor.openGraphID, @openGraphID] unless @openGraphID.empty?
+
+       unless @gPlusID.empty?
+          graph << [RDF::URI(GPLUS_URI_PREFIX + @gPlusID), RDF.type, clsauthor.GooglePlusProfile]
+          graph << [myuri, clsauthor.hasGooglePlusProfile, RDF::URI(GPLUS_URI_PREFIX + @gPlusID)]
+        end
+
+        unless @gScholarID.empty?
+          graph << [RDF::URI(GSCHOLAR_URI_PREFIX + @gScholarID), RDF.type, clsauthor.GoogleScholarPage]
+          graph << [myuri, clsauthor.hasGoogleScholarPage, RDF::URI(GSCHOLAR_URI_PREFIX + @gScholarID)]
+        end
+
+        unless @openGraphID.empty?
+          graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
+          graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
+        end
+
         graph << [myuri, clsauthor.orcID, @orcidID] unless @orcidID.empty?
         graph << [myuri, clsauthor.ssrnAuthorID, @ssrnAuthorID] unless @ssrnAuthorID.empty?
-        graph << [myuri, OWL.sameAs, RDF::URI(@worldCatID)] unless @worldCatID.empty?
+
+        unless @worldCatID.empty?
+          graph << [RDF::URI(@worldCatID), RDF.type, clsauthor.WorldCatPage]
+          graph << [myuri, clsauthor.hasWorldCatPage, RDF::URI(@worldCatID)]
+        end
+
         graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
-        graph << [myuri, clsauthor.linkedInProfile, @linkedInProfile] unless @linkedInProfile.empty?
+
+        unless @linkedInProfile.empty?
+          graph << [RDF::URI(@linkedInProfile), RDF.type, clsauthor.LinkedInProfile]
+          graph << [myuri, clsauthor.hasLinkedInProfile, RDF::URI(@linkedInProfile)]
+        end
+
+
         graph << [myuri, FOAF.homepage, @homepage] unless @homepage.empty?
-        graph << [myuri, OWL.sameAs, RDF::URI(@viafID)] unless @viafID.empty?
+
+        unless @viafID.empty?
+          graph << [RDF::URI(@viafID), RDF.type, clsauthor.ViafPage]
+          graph << [myuri, clsauthor.hasViafPage, RDF::URI(@viafID)]
+        end
+
         graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
-        graph << [myuri, OWL.sameAs, RDF::URI(@bePressID)] unless @bePressID.empty?
+
+        unless @bePressID.empty?
+          graph << [RDF::URI(@bePressID), RDF.type, clsauthor.BePressPage]
+          graph << [myuri, clsauthor.hasBePressPage, RDF::URI(@bePressID)]
+        end
+
         graph << [myuri, OWL.sameAs, RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
+        graph << [myuri, OWL.sameAs, RDF::URI(@freeBaseID)] unless @freeBaseID.empty?
       end
     end
   end
@@ -459,25 +501,26 @@ class CLSAuthorSpreadsheet
   # populates a single author entry
   # TODO -- find out what this does with null/empty values
   def populate_author(row, author)
-    author.birthYear= @ws[row,@colnames.index("BirthYear")+1]
-    author.deathYear = @ws[row,@colnames.index("DeathYear")+1]
-    author.firstName=  @ws[row,@colnames.index("First name")+1]
-    author.lastName= @ws[row,@colnames.index("Last name")+1]
-    author.middleName= @ws[row,@colnames.index("Middle name")+1]
-    author.gPlusID= @ws[row,@colnames.index("googlePlusID")+1]
-    author.gScholarID= @ws[row,@colnames.index("googleScholarID")+1]
-    author.liiScholarID= @ws[row,@colnames.index("clsScholarID")+1]
-    author.openGraphID= @ws[row,@colnames.index("openGraphID")+1]
-    author.orcidID=@ws[row,@colnames.index("orcID")+1]
-    author.ssrnAuthorID= @ws[row,@colnames.index("ssrnID")+1]
-    author.worldCatID= @ws[row,@colnames.index("worldCatID")+1]
-    author.clsBio= @ws[row,@colnames.index("institutionBioURL")+1]
-    author.linkedInProfile= @ws[row,@colnames.index("linkedInProfile")+1]
-    author.homepage= @ws[row,@colnames.index("Homepage")+1]
-    author.viafID= @ws[row,@colnames.index("viafID")+1]
-    author.crossRefID= @ws[row,@colnames.index("crossRefID")+1]
-    author.bePressID = @ws[row,@colnames.index("bePressID")+1]
-    author.dbPediaID = @ws[row,@colnames.index("dbPediaID")+1]
+    author.birthYear= @ws[row,@colnames.index("BirthYear")+1].strip
+    author.deathYear = @ws[row,@colnames.index("DeathYear")+1].strip
+    author.firstName=  @ws[row,@colnames.index("First name")+1].strip
+    author.lastName= @ws[row,@colnames.index("Last name")+1].strip
+    author.middleName= @ws[row,@colnames.index("Middle name")+1].strip
+    author.gPlusID= @ws[row,@colnames.index("googlePlusID")+1].strip
+    author.gScholarID= @ws[row,@colnames.index("googleScholarID")+1].strip
+    author.liiScholarID= @ws[row,@colnames.index("clsScholarID")+1].strip
+    author.openGraphID= @ws[row,@colnames.index("openGraphID")+1].strip
+    author.orcidID=@ws[row,@colnames.index("orcID")+1].strip
+    author.ssrnAuthorID= @ws[row,@colnames.index("ssrnID")+1].strip
+    author.worldCatID= @ws[row,@colnames.index("worldCatID")+1].strip
+    author.clsBio= @ws[row,@colnames.index("institutionBioURL")+1].strip
+    author.linkedInProfile= @ws[row,@colnames.index("linkedInProfile")+1].strip
+    author.homepage= @ws[row,@colnames.index("Homepage")+1].strip
+    author.viafID= @ws[row,@colnames.index("viafID")+1].strip
+    author.crossRefID= @ws[row,@colnames.index("crossRefID")+1].strip
+    author.bePressID = @ws[row,@colnames.index("bePressID")+1].strip
+    author.dbPediaID = @ws[row,@colnames.index("dbPediaID")+1].strip
+    author.freeBaseID = @ws[row,@colnames.index("FreeBaseID")+1].strip
   end
 
   def process_papers
@@ -567,6 +610,17 @@ class CLSAuthorRunner
   end
   def run_authors_papers_with_citations
      @sheet.process_extract_citations
+  end
+  def demo_citations
+    test_list = Array.new
+    test_list.push(CLSAuthor.new('http://liicornell.org/scholars/thomas_bruce_1'))
+    test_list.push(CLSAuthor.new('http://liicornell.org/scholars/michael_dorf_1'))
+    test_list.each do |author|
+      next if author.ssrnAuthorID.empty?
+      page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      page.scrape
+      page.process_paper_citations
+    end
   end
 end
 
