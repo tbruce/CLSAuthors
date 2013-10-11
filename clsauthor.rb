@@ -611,6 +611,7 @@ class CLSAuthorRunner
   def run_authors_papers_with_citations
      @sheet.process_extract_citations
   end
+  # limited set of authors for demo
   def demo_citations
     test_list = Array.new
     test_list.push(CLSAuthor.new('http://liicornell.org/scholars/thomas_bruce_1'))
