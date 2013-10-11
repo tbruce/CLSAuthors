@@ -53,6 +53,7 @@ require 'trollop'
 require 'rdf'
 include RDF
 require 'rdf/ntriples'
+require 'digest/md5'
 
 
 #-- class for representing/modeling SSRN abstract pages
@@ -60,12 +61,14 @@ require 'rdf/ntriples'
 class SSRNAbstractPage
   attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:pdf_url
 
-  def initialize(my_id, my_ssrn_author_id)
+  def initialize(my_id, my_ssrn_author_id, my_cls_author_uri)
     @paper_id = my_id
-    @author_id = my_ssrn_author_id
+    @ssrn_author_id = my_ssrn_author_id
+    @cls_author_uri = my_cls_author_uri
     @url = SSRN_ABSTRACT_PREFIX + my_id
     @paper_URI = LII_SSRN_PAPER_URI_PREFIX + my_id
-    @cls_author_id = LII_SSRN_AUTHOR_URI_PREFIX + my_ssrn_author_id
+    @cls_ssrn_uri = LII_SSRN_AUTHOR_URI_PREFIX + my_ssrn_author_id
+
 
     @keywords = Array.new()
     @jelcodes = Array.new()
@@ -172,7 +175,7 @@ class SSRNAbstractPage
     myuri = RDF::URI(@paper_URI)
     RDF::Writer.for(:ntriples).new() do |writer|
       writer << RDF::Graph.new do |graph|
-        graph << [myuri, DC.contributor, RDF::URI(@cls_author_id)]
+        graph << [myuri, DC.contributor, RDF::URI(@cls_author_uri)]
         graph << [myuri,RDF.type,bibo.Article]
         graph << [myuri,clsauthor.abstractPage,@url]
         graph << [myuri,DC.abstract,@abstract] if @abstract
@@ -355,7 +358,7 @@ class SSRNAuthorPage
 
   def process_abstracts
     @abstractlist.each do |absnum|
-      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id)
+      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
       abstract.scrape
       abstract.create_triples
     end
@@ -363,7 +366,7 @@ class SSRNAuthorPage
 
   def process_paper_citations
       @abstractlist.each do |absnum|
-        abstract =  SSRNAbstractPage.new(absnum, @ssrn_id)
+        abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
         abstract.extract_paper_citations
       end
     end
@@ -407,13 +410,17 @@ class CLSAuthor
         graph << [myuri, FOAF.familyName, @lastName] unless @lastName.empty?
 
        unless @gPlusID.empty?
-          graph << [RDF::URI(GPLUS_URI_PREFIX + @gPlusID), RDF.type, clsauthor.GooglePlusProfile]
-          graph << [myuri, clsauthor.hasGooglePlusProfile, RDF::URI(GPLUS_URI_PREFIX + @gPlusID)]
+          fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
+          graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
+          graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
+          graph << [fakeid, FOAF.page, GPLUS_URI_PREFIX+@gScholarID ]
         end
 
         unless @gScholarID.empty?
-          graph << [RDF::URI(GSCHOLAR_URI_PREFIX + @gScholarID), RDF.type, clsauthor.GoogleScholarPage]
-          graph << [myuri, clsauthor.hasGoogleScholarPage, RDF::URI(GSCHOLAR_URI_PREFIX + @gScholarID)]
+          fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
+          graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
+          graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
+          graph << [fakeid, FOAF.page, GSCHOLAR_URI_PREFIX + @gScholarID]
         end
 
         unless @openGraphID.empty?
@@ -425,30 +432,38 @@ class CLSAuthor
         graph << [myuri, clsauthor.ssrnAuthorID, @ssrnAuthorID] unless @ssrnAuthorID.empty?
 
         unless @worldCatID.empty?
-          graph << [RDF::URI(@worldCatID), RDF.type, clsauthor.WorldCatPage]
-          graph << [myuri, clsauthor.hasWorldCatPage, RDF::URI(@worldCatID)]
+          fakeid = RDF::URI('http://liicornell.org/worldcat/' + Digest::MD5.hexdigest(@worldCatID))
+          graph << [fakeid, RDF.type, clsauthor.WorldCatPage]
+          graph << [myuri, clsauthor.hasWorldCatPage, fakeid]
+          graph << [fakeid, FOAF.page, @worldCatID]
         end
 
         graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
 
         unless @linkedInProfile.empty?
-          graph << [RDF::URI(@linkedInProfile), RDF.type, clsauthor.LinkedInProfile]
-          graph << [myuri, clsauthor.hasLinkedInProfile, RDF::URI(@linkedInProfile)]
+          fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
+          graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
+          graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
+          graph << [fakeid, FOAF.page, @linkedInProfile]
         end
 
 
         graph << [myuri, FOAF.homepage, @homepage] unless @homepage.empty?
 
         unless @viafID.empty?
-          graph << [RDF::URI(@viafID), RDF.type, clsauthor.ViafPage]
-          graph << [myuri, clsauthor.hasViafPage, RDF::URI(@viafID)]
+          fakeid = RDF::URI('http://liicornell.org/viaf/' + Digest::MD5.hexdigest(@viafID))
+          graph << [fakeid, RDF.type, clsauthor.ViafPage]
+          graph << [myuri, clsauthor.hasViafPage, fakeid]
+          graph << [fakeid, FOAF.page, @viafID]
         end
 
         graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
 
         unless @bePressID.empty?
-          graph << [RDF::URI(@bePressID), RDF.type, clsauthor.BePressPage]
-          graph << [myuri, clsauthor.hasBePressPage, RDF::URI(@bePressID)]
+          fakeid = RDF::URI('http://liicornell.org/bepress/' + Digest::MD5.hexdigest(@bePressID))
+          graph << [fakeid, RDF.type, clsauthor.BePressPage]
+          graph << [myuri, clsauthor.hasBePressPage, fakeid]
+          graph << [fakeid, FOAF.page, @bePressID]
         end
 
         graph << [myuri, OWL.sameAs, RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
