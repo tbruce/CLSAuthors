@@ -54,6 +54,7 @@ require 'rdf'
 include RDF
 require 'rdf/ntriples'
 require 'digest/md5'
+require 'open-uri'
 
 
 #-- class for representing/modeling SSRN abstract pages
@@ -149,7 +150,7 @@ class SSRNAbstractPage
   def scrape_authors
     @doc.xpath("//center/font/a[@title='View other papers by this author']").each do |link|
       auth_id =  /per_id=([0-9]+)/.match(link['href'])[1]
-       @coauthors.push(auth_id) unless auth_id == @author_id
+       @coauthors.push(auth_id) unless auth_id.eql?(@ssrn_author_id)
     end
   end
 
@@ -197,7 +198,13 @@ class SSRNAbstractPage
         end
         @coauthors.each do |scribbler|
           scribURI = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + scribbler)
+          graph << [scribURI, RDF.type, clsauthor.SSRNAuthor ]
           graph << [myuri, DC.contributor, scribURI]
+          # stick in name information, just to be informative
+          coauthpage = SSRNAuthorPage.new(scribbler,scribURI)
+          coauthpage.scrape
+          graph << [scribURI, FOAF.givenName, coauthpage.firstName]
+          graph << [scribURI, FOAF.familyName, coauthpage.lastName]
         end
       end
     end
@@ -290,7 +297,7 @@ class SSRNAbstractPage
               thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refPopName,thisuri]
             else
-              graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
+              graph << [puri, clsauthor.citedPage,URI::encode(mention['url'])]
           end
         end
       end
@@ -325,11 +332,13 @@ end
 #-- class for modeling/constructing SSRN author pages
 
 class SSRNAuthorPage
-  attr_reader :ssrn_id, :abstractlist
+  attr_reader :ssrn_id, :abstractlist , :firstName , :lastName
   def initialize(my_ssrn_id, author_uri)
     @author_URI = author_uri
     @ssrn_id = my_ssrn_id
     @abstractlist = Array.new()
+    @lastName = nil
+    @firstName = nil
     begin
       html = Net::HTTP.get(URI(SSRN_AUTHOR_PREFIX+@ssrn_id))
       raise "Author listing page for ID #{@ssrn_id} unavailable" unless html
@@ -352,6 +361,10 @@ class SSRNAuthorPage
       stuff = /http:\/\/ssrn\.com\/abstract=([0-9]+)/.match(link['href'])
       @abstractlist.push stuff[1] if stuff
     end
+    # get author name information
+    namestring = @doc.xpath("//h1")[0].inner_text
+    @lastName,@firstName = namestring.split
+    @lastName.gsub!(/,$/,'')
   end
 
   #-- process each of the abstracts listed on the page
@@ -394,7 +407,7 @@ class CLSAuthor
   end
 
   #-- create triples for everything we know about the author
-  def create_triples(clsauthor)
+  def create_triples(clsauthor, bibo)
     myuri = RDF::URI(@liiScholarID)
     myssrnuri = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + @ssrnAuthorID)
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
@@ -410,17 +423,17 @@ class CLSAuthor
         graph << [myuri, FOAF.familyName, @lastName] unless @lastName.empty?
 
        unless @gPlusID.empty?
-          fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
-          graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
-          graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
-          graph << [fakeid, FOAF.page, GPLUS_URI_PREFIX+@gScholarID ]
+         # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
+         # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
+         # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
+          graph << [myuri, clsauthor.gPlusProfile, GPLUS_URI_PREFIX+@gScholarID ]
         end
 
         unless @gScholarID.empty?
-          fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
-          graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
-          graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
-          graph << [fakeid, FOAF.page, GSCHOLAR_URI_PREFIX + @gScholarID]
+         # fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
+         # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
+         # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
+          graph << [myuri, clsauthor.gScholarPage, GSCHOLAR_URI_PREFIX + @gScholarID]
         end
 
         unless @openGraphID.empty?
@@ -432,38 +445,38 @@ class CLSAuthor
         graph << [myuri, clsauthor.ssrnAuthorID, @ssrnAuthorID] unless @ssrnAuthorID.empty?
 
         unless @worldCatID.empty?
-          fakeid = RDF::URI('http://liicornell.org/worldcat/' + Digest::MD5.hexdigest(@worldCatID))
-          graph << [fakeid, RDF.type, clsauthor.WorldCatPage]
-          graph << [myuri, clsauthor.hasWorldCatPage, fakeid]
-          graph << [fakeid, FOAF.page, @worldCatID]
+          #fakeid = RDF::URI('http://liicornell.org/worldcat/' + Digest::MD5.hexdigest(@worldCatID))
+          #graph << [fakeid, RDF.type, clsauthor.WorldCatPage]
+          #graph << [myuri, clsauthor.hasWorldCatPage, fakeid]
+          graph << [myuri, clsauthor.worldCatPage, @worldCatID]
         end
 
         graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
 
         unless @linkedInProfile.empty?
-          fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
-          graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
-          graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
-          graph << [fakeid, FOAF.page, @linkedInProfile]
+          #fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
+          #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
+          #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
+          graph << [myuri, clsauthor.linkedInProfile, @linkedInProfile]
         end
 
 
         graph << [myuri, FOAF.homepage, @homepage] unless @homepage.empty?
 
         unless @viafID.empty?
-          fakeid = RDF::URI('http://liicornell.org/viaf/' + Digest::MD5.hexdigest(@viafID))
-          graph << [fakeid, RDF.type, clsauthor.ViafPage]
-          graph << [myuri, clsauthor.hasViafPage, fakeid]
-          graph << [fakeid, FOAF.page, @viafID]
+          #fakeid = RDF::URI('http://liicornell.org/viaf/' + Digest::MD5.hexdigest(@viafID))
+          #graph << [fakeid, RDF.type, clsauthor.ViafPage]
+          #graph << [myuri, clsauthor.hasViafPage, fakeid]
+          graph << [myuri, clsauthor.viafPage, @viafID]
         end
 
         graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
 
         unless @bePressID.empty?
-          fakeid = RDF::URI('http://liicornell.org/bepress/' + Digest::MD5.hexdigest(@bePressID))
-          graph << [fakeid, RDF.type, clsauthor.BePressPage]
-          graph << [myuri, clsauthor.hasBePressPage, fakeid]
-          graph << [fakeid, FOAF.page, @bePressID]
+          #fakeid = RDF::URI('http://liicornell.org/bepress/' + Digest::MD5.hexdigest(@bePressID))
+          #graph << [fakeid, RDF.type, clsauthor.BePressPage]
+          #graph << [myuri, clsauthor.hasBePressPage, fakeid]
+          graph << [myuri, clsauthor.bePressPage, @bePressID]
         end
 
         graph << [myuri, OWL.sameAs, RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
@@ -566,8 +579,9 @@ class CLSAuthorSpreadsheet
   #-- create triples calls create_triples for each author in the list
   def create_triples
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
+    bibo = RDF::Vocabulary.new(BIBO_VOCABULARY)
     @author_list.each do |author|
-      author.create_triples(clsauthor)
+      author.create_triples(clsauthor,bibo)
     end
   end
 
@@ -598,6 +612,7 @@ class CLSAuthorRunner
     test_abstract_page if @opts.test_abstract
     test_paperlist if @opts.test_author
     test_spreadsheet if @opts.test_spreadsheet
+    demo_citations if @opts.demo_citations
   end
   def test_abstract_page
     pg = SSRNAbstractPage.new('2218855','489995')
@@ -628,15 +643,7 @@ class CLSAuthorRunner
   end
   # limited set of authors for demo
   def demo_citations
-    test_list = Array.new
-    test_list.push(CLSAuthor.new('http://liicornell.org/scholars/thomas_bruce_1'))
-    test_list.push(CLSAuthor.new('http://liicornell.org/scholars/michael_dorf_1'))
-    test_list.each do |author|
-      next if author.ssrnAuthorID.empty?
-      page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
-      page.scrape
-      page.process_paper_citations
-    end
+
   end
 end
 
@@ -655,6 +662,7 @@ EOBANNER
   opt :test_abstract, "Run scrape test for a single abstract"
   opt :test_author, "Run scrape test for a single author's papers"
   opt :test_spreadsheet, "Run spreadsheet dump"
+  opt :demo_citations, "Run primary materials citations for a small precoded set of authors"
 end
 control = CLSAuthorRunner.new(opts)
 control.run
