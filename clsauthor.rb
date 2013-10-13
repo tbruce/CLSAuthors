@@ -427,6 +427,7 @@ class CLSAuthor
          # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
          # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
           graph << [myuri, clsauthor.gPlusProfile, GPLUS_URI_PREFIX+@gScholarID ]
+          graph << [myuri, RDF::URI('http://live.dbpedia.org/ontology/wikiPageExternalLink'), GPLUS_URI_PREFIX+@gScholarID ]
         end
 
         unless @gScholarID.empty?
@@ -434,11 +435,12 @@ class CLSAuthor
          # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
          # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
           graph << [myuri, clsauthor.gScholarPage, GSCHOLAR_URI_PREFIX + @gScholarID]
+          graph << [myuri, RDF::URI('http://live.dbpedia.org/ontology/wikiPageExternalLink'), GSCHOLAR_URI_PREFIX + @gScholarID]
         end
 
         unless @openGraphID.empty?
-          graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
-          graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
+         # graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
+         # graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
         end
 
         graph << [myuri, clsauthor.orcID, @orcidID] unless @orcidID.empty?
@@ -449,6 +451,7 @@ class CLSAuthor
           #graph << [fakeid, RDF.type, clsauthor.WorldCatPage]
           #graph << [myuri, clsauthor.hasWorldCatPage, fakeid]
           graph << [myuri, clsauthor.worldCatPage, @worldCatID]
+          graph << [myuri, RDF::URI('http://live.dbpedia.org/ontology/wikiPageExternalLink'), @worldCatID]
         end
 
         graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
@@ -458,6 +461,7 @@ class CLSAuthor
           #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
           #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
           graph << [myuri, clsauthor.linkedInProfile, @linkedInProfile]
+          graph << [myuri, RDF::URI('http://live.dbpedia.org/ontology/wikiPageExternalLink'), @linkedInProfile]
         end
 
 
@@ -468,6 +472,7 @@ class CLSAuthor
           #graph << [fakeid, RDF.type, clsauthor.ViafPage]
           #graph << [myuri, clsauthor.hasViafPage, fakeid]
           graph << [myuri, clsauthor.viafPage, @viafID]
+          graph << [myuri, RDF::URI('http://live.dbpedia.org/ontology/wikiPageExternalLink'), @viafID]
         end
 
         graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
@@ -477,10 +482,11 @@ class CLSAuthor
           #graph << [fakeid, RDF.type, clsauthor.BePressPage]
           #graph << [myuri, clsauthor.hasBePressPage, fakeid]
           graph << [myuri, clsauthor.bePressPage, @bePressID]
+          graph << [myuri, RDF::URI('http://live.dbpedia.org/ontology/wikiPageExternalLink'), @bePressID]
         end
 
         graph << [myuri, OWL.sameAs, RDF::URI(@dbPediaID)] unless @dbPediaID.empty?
-        graph << [myuri, OWL.sameAs, RDF::URI(@freeBaseID)] unless @freeBaseID.empty?
+        #graph << [myuri, OWL.sameAs, RDF::URI(@freeBaseID)] unless @freeBaseID.empty?
       end
     end
   end
