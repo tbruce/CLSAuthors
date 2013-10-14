@@ -426,7 +426,7 @@ class CLSAuthor
          # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
          # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
          # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
-          graph << [myuri, clsauthor.gPlusPage, RDF::URI(GPLUS_URI_PREFIX+@gScholarID) ]
+          graph << [myuri, clsauthor.gPlusProfile,RDF::URI(GPLUS_URI_PREFIX+@gScholarID) ]
         end
 
         unless @gScholarID.empty?
@@ -437,8 +437,8 @@ class CLSAuthor
         end
 
         unless @openGraphID.empty?
-          graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
-          graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
+         # graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
+         # graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
         end
 
         graph << [myuri, clsauthor.orcID, @orcidID] unless @orcidID.empty?
@@ -457,7 +457,7 @@ class CLSAuthor
           #fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
           #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
           #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
-          graph << [myuri, clsauthor.linkedInProfile, RDF::URI(@linkedInProfile)]
+          graph << [myuri, clsauthor.linkedInProfile, REF::URI(@linkedInProfile)]
         end
 
 
@@ -624,7 +624,7 @@ class CLSAuthorRunner
   def test_paperlist
     pg = SSRNAuthorPage.new('45120')
     pg.scrape
-    puts  "#{pg}"
+    puts "#{pg}"
   end
   def test_spreadsheet
     sheet = CLSAuthorSpreadsheet.new()
