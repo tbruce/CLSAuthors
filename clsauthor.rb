@@ -624,7 +624,7 @@ class CLSAuthorRunner
   def test_paperlist
     pg = SSRNAuthorPage.new('45120')
     pg.scrape
-    puts "#{pg}"
+    puts  "#{pg}"
   end
   def test_spreadsheet
     sheet = CLSAuthorSpreadsheet.new()
