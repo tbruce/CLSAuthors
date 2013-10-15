@@ -457,7 +457,7 @@ class CLSAuthor
           #fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
           #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
           #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
-          graph << [myuri, clsauthor.linkedInProfile, REF::URI(@linkedInProfile)]
+          graph << [myuri, clsauthor.linkedInProfile, RDF::URI(@linkedInProfile)]
         end
 
 
