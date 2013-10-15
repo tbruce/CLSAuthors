@@ -57,7 +57,7 @@ require 'digest/md5'
 require 'open-uri'
 
 
-#-- class for representing/modeling SSRN abstract pages
+#-- class for representing/modeling some SSRN abstract pages
 
 class SSRNAbstractPage
   attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:pdf_url
@@ -457,7 +457,7 @@ class CLSAuthor
           #fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
           #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
           #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
-          graph << [myuri, clsauthor.linkedInProfile, REF::URI(@linkedInProfile)]
+          graph << [myuri, clsauthor.linkedInProfile, RDF::URI(@linkedInProfile)]
         end
 
 
