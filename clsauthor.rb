@@ -57,7 +57,7 @@ require 'digest/md5'
 require 'open-uri'
 
 
-#-- class for representing/modeling SSRN abstract pages
+#-- class for representing/modeling some SSRN abstract pages
 
 class SSRNAbstractPage
   attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:pdf_url
