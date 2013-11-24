@@ -257,6 +257,8 @@ class SSRNAbstractPage
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
         key, ary = JSON.parse(cite_json).first()
+        # TODO: add logging for empty ary element (paper url)
+        # TODO: add error handling/logging for ary that is an error hash with 3 elements (JSON docs?)
         ary.each do |mention|
           case mention['form']
             when 'cfr'
