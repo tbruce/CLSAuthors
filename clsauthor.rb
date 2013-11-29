@@ -11,7 +11,7 @@
 # location of vocabularies that are not built into RDF::Writer
 # these MUST have terminal slashes
 # TODO: add JELS vocab
-
+CLSAUTHOR_LOGFILE='/tmp/clsauthor.log'
 CLS_VOCABULARY='http://liicornell.org/liischolar/'
 BIBO_VOCABULARY='http://purl.org/ontology/bibo/'
 
@@ -55,6 +55,8 @@ include RDF
 require 'rdf/ntriples'
 require 'digest/md5'
 require 'open-uri'
+require 'log4r'
+include Log4r
 
 
 #-- class for representing/modeling some SSRN abstract pages
@@ -230,14 +232,21 @@ class SSRNAbstractPage
     # send the file to citationer
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
-    c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
-    cite_json = c.body_str
+    begin
+      c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
+    rescue
+      mylog = Logger.new 'mylog'
+      logfile = FileOutputter.new('fileOutputter', :filename => CLSAUTHOR_LOGFILE,:trunc => false)
+      mylog.add(logfile)
+      mylog.warn "Couldn't get JSON for #{@url}"
+      return
+    end
+      cite_json = c.body_str
+      # process json from citationer
+      create_citation_triples(cite_json)
 
     # kill the file and the directory
     File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
-
-    # process json from citationer
-    create_citation_triples(cite_json)
   end
 
   # creates citation triples given json output from citationer
@@ -252,6 +261,12 @@ class SSRNAbstractPage
   # citedPage
 
   def create_citation_triples(cite_json)
+
+    # set up logging
+    mylog = Logger.new 'mylog'
+    logfile = FileOutputter.new('fileOutputter', :filename => CLSAUTHOR_LOGFILE,:trunc => false)
+    mylog.add(logfile)
+
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     puri = RDF::URI(@paper_URI)
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
@@ -259,6 +274,11 @@ class SSRNAbstractPage
         key, ary = JSON.parse(cite_json).first()
         # TODO: add logging for empty ary element (paper url)
         # TODO: add error handling/logging for ary that is an error hash with 3 elements (JSON docs?)
+        mylog.info "Working on #{@url}"
+        if ary.empty? || (ary.class == "Hash" && ary.has_key?("error"))
+           mylog.warn "Empty cite/JSON return for #{@url}"
+           return
+        end
         ary.each do |mention|
           case mention['form']
             when 'cfr'
@@ -632,7 +652,7 @@ class CLSAuthorRunner
     end
   end
   def test_abstract_page
-    pg = SSRNAbstractPage.new('2218855','489995')
+    pg = SSRNAbstractPage.new('2126627','383474','http://liicornell.org/scholars/cynthia_bowman_1')
     pg.scrape
     pg.create_triples
     pg.extract_paper_citations(@browser,@stashdir)
