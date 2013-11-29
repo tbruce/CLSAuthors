@@ -210,23 +210,14 @@ class SSRNAbstractPage
     end
   end
 
-  def extract_paper_citations
-    # make a one-time temporary directory
-    stashdir = Dir.mktmpdir
-    # set up a browser simulator
-    profile = Selenium::WebDriver::Firefox::Profile.new
-    profile['browser.download.folderList'] = 2 #specifies custom location
-    profile['browser.download.dir'] = "#{stashdir}"
-    profile['browser.helperApps.neverAsk.saveToDisk'] = "application/pdf,application/x-pdf,application/octet-stream"
-    headless = Headless.new
-    headless.start
-    b = Watir::Browser.new :firefox, :profile => profile
-
-    # go through signin procedure
-    b.goto SSRN_LOGIN_AJAX
+  def extract_paper_citations(b,stashdir)
     b.goto @url
     # grab the PDF file
-    b.link(:class,"downloadBt").click
+    begin
+      b.link(:class,"downloadBt").click
+    rescue StandardError
+      return
+    end
     # wait for DL to start
     while Dir.entries("#{stashdir}").length < 3
       sleep(1)
@@ -236,20 +227,16 @@ class SSRNAbstractPage
     while  File.exist?("#{stashdir}/#{myfile}.part")
       sleep(1)
     end
-
-    # kill off the browser simulator
-    b.close
-    headless.destroy
     # send the file to citationer
-
-    # process json from citationer
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
     c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
     cite_json = c.body_str
+
     # kill the file and the directory
-    File.unlink("#{stashdir}/#{myfile}")
-    Dir.unlink("#{stashdir}")
+    File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
+
+    # process json from citationer
     create_citation_triples(cite_json)
   end
 
@@ -270,6 +257,8 @@ class SSRNAbstractPage
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
         key, ary = JSON.parse(cite_json).first()
+        # TODO: add logging for empty ary element (paper url)
+        # TODO: add error handling/logging for ary that is an error hash with 3 elements (JSON docs?)
         ary.each do |mention|
           case mention['form']
             when 'cfr'
@@ -377,10 +366,10 @@ class SSRNAuthorPage
     end
   end
 
-  def process_paper_citations
+  def process_paper_citations(browser, stashdir)
       @abstractlist.each do |absnum|
         abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
-        abstract.extract_paper_citations
+        abstract.extract_paper_citations(browser, stashdir)
       end
     end
 
@@ -560,12 +549,12 @@ class CLSAuthorSpreadsheet
     end
   end
 
-  def process_extract_citations
+  def process_extract_citations(browser,stashdir)
     @author_list.each do |author|
       next if author.ssrnAuthorID.empty?
       page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
       page.scrape
-      page.process_paper_citations
+      page.process_paper_citations(browser,stashdir)
     end
   end
 
@@ -604,8 +593,28 @@ class CLSAuthorRunner
   def initialize (opt_hash)
     @opts =opt_hash
     @sheet = CLSAuthorSpreadsheet.new()
+    @browser = nil # browser simulator
+    @stashdir = nil # place to put downloaded pdfs, temporarily
   end
+
   def run
+    # set up a browser simulator if it's needed
+    if @opts.cited || @opts.test_abstract
+      # make a one-time temporary directory
+      @stashdir = Dir.mktmpdir
+      # set up a browser simulator
+      profile = Selenium::WebDriver::Firefox::Profile.new
+      profile['browser.download.folderList'] = 2 #specifies custom location
+      profile['browser.download.dir'] = "#{@stashdir}"
+      profile['browser.helperApps.neverAsk.saveToDisk'] = "application/pdf,application/x-pdf,application/octet-stream"
+      headless = Headless.new
+      headless.start
+      @browser = Watir::Browser.new :firefox, :profile => profile
+      # go through signin procedure
+      @browser.goto SSRN_LOGIN_AJAX
+    end
+
+    # do stuff
     run_authors if @opts.authors
     run_papers if @opts.abstracts
     run_authors_papers_with_citations if @opts.cited
@@ -613,12 +622,20 @@ class CLSAuthorRunner
     test_paperlist if @opts.test_author
     test_spreadsheet if @opts.test_spreadsheet
     demo_citations if @opts.demo_citations
+
+    # clean up
+    if @opts.cited || @opts.test_abstract
+      # kill off the browser simulator
+      b.close
+      headless.destroy
+      Dir.unlink("#{stashdir}")
+    end
   end
   def test_abstract_page
     pg = SSRNAbstractPage.new('2218855','489995')
     pg.scrape
     pg.create_triples
-    pg.extract_paper_citations
+    pg.extract_paper_citations(@browser,@stashdir)
     puts "#{pg}"
   end
   def test_paperlist
@@ -639,7 +656,7 @@ class CLSAuthorRunner
     @sheet.process_papers
   end
   def run_authors_papers_with_citations
-     @sheet.process_extract_citations
+     @sheet.process_extract_citations(@browser,@stashdir)
   end
   # limited set of authors for demo
   def demo_citations
