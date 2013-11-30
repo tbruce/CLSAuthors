@@ -93,8 +93,9 @@ class SSRNAbstractPage
     begin
       uri = URI(@url)
       html = Net::HTTP.get(uri)
-      unless html
+      if html.nil?
         raise "Abstract page #{@url} unavailable"
+        return nil
       end
     rescue Exception => e
       puts e.message
@@ -275,8 +276,12 @@ class SSRNAbstractPage
         # TODO: add logging for empty ary element (paper url)
         # TODO: add error handling/logging for ary that is an error hash with 3 elements (JSON docs?)
         mylog.info "Working on #{@url}"
-        if ary.empty? || (ary.class == "Hash" && ary.has_key?("error"))
+        if ary.nil? || ary.empty? || (ary.class == Hash && ary.has_key?("error"))
            mylog.warn "Empty cite/JSON return for #{@url}"
+           return if ary.nil?
+           if ary.class == Hash && ary.has_key?("error")
+             mylog.warn "Error: #{ary['emsg']}"
+           end
            return
         end
         ary.each do |mention|
@@ -291,6 +296,7 @@ class SSRNAbstractPage
               thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refStatL,thisuri]
             when 'scotus'
+              #TODO -- clean up US reports cites returned by citationer
               thisuri = RDF::URI('http://liicornell.org/liiscotus/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refStatL,thisuri]
               graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
@@ -627,8 +633,8 @@ class CLSAuthorRunner
       profile['browser.download.folderList'] = 2 #specifies custom location
       profile['browser.download.dir'] = "#{@stashdir}"
       profile['browser.helperApps.neverAsk.saveToDisk'] = "application/pdf,application/x-pdf,application/octet-stream"
-      headless = Headless.new
-      headless.start
+      @headless = Headless.new
+      @headless.start
       @browser = Watir::Browser.new :firefox, :profile => profile
       # go through signin procedure
       @browser.goto SSRN_LOGIN_AJAX
@@ -646,8 +652,8 @@ class CLSAuthorRunner
     # clean up
     if @opts.cited || @opts.test_abstract
       # kill off the browser simulator
-      b.close
-      headless.destroy
+      @browser.close
+      @headless.destroy
       Dir.unlink("#{stashdir}")
     end
   end
