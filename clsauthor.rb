@@ -104,6 +104,7 @@ class SSRNAbstractPage
     html.gsub!(/<\/*nobr>/m, '')
 
     clean_html = SimpleTidy.clean(html, :force_output => true)
+    #clean_html = Nokogiri::HTML(html).to_html
     @doc = Nokogiri::HTML(clean_html)
   end
 
@@ -169,7 +170,7 @@ class SSRNAbstractPage
     end
   end
 
-  #-- create triples for everything we know about the author
+  #-- create triples for everything we know about the paper
   def create_triples
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     bibo = RDF::Vocabulary.new(BIBO_VOCABULARY)
@@ -190,6 +191,8 @@ class SSRNAbstractPage
         graph << [myuri,clsauthor.ssrnFNCount,@paper_citations] if @paper_citations
         graph << [myuri, clsauthor.ssrnDLRank,@dl_rank] if @dl_rank
         @keywords.each do |subj|
+          # normalize to lowercase
+          subj.downcase!
           graph << [myuri,DC.subject, subj]
         end
         @jelcodes.each do |jel|
@@ -230,11 +233,23 @@ class SSRNAbstractPage
     # send the file to citationer
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
-    c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
+    begin
+      c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
+    rescue StandardError
+      return
+    end
     cite_json = c.body_str
 
     # kill the file and the directory
     File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
+
+    # run a check on the conversion.  usual problem is PHP uploading error.
+    jary = JSON.parse(cite_json)
+    return unless jary.first()[myfile].defined?
+    if jary[myfile]['error'].defined?
+      $stderr.puts "File #{myfile} throws error " + jary[myfile]['error']['type'] + " with message " + jary[myfile]['error']['emsg']
+      return
+    end
 
     # process json from citationer
     create_citation_triples(cite_json)
@@ -246,6 +261,7 @@ class SSRNAbstractPage
   # refCFR
   # refPopName
   # refUSCode
+  # refSCOTUS
   # This takes a dbPedia URI
   # refDBPedia (based on popular name of act, and maybe on citation)
   # These take URLs for which there are no URIs
@@ -261,6 +277,9 @@ class SSRNAbstractPage
         # TODO: add error handling/logging for ary that is an error hash with 3 elements (JSON docs?)
         ary.each do |mention|
           case mention['form']
+            #when '-'
+            #  $stderr.puts "Citationer did not handle: " + mention['matched'].to_s
+              # this is a reference that Citationer did not know how to handle....
             when 'cfr'
               thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refCFR,thisuri]
@@ -271,8 +290,10 @@ class SSRNAbstractPage
               thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refStatL,thisuri]
             when 'scotus'
-              thisuri = RDF::URI('http://liicornell.org/liiscotus/' + mention['cite'].gsub(/\s+/,'_'))
-              graph << [puri, clsauthor.refStatL,thisuri]
+              # chop off everything but volume and page reference
+              chopped = /[0-9]+\s+US\s+[0-9]+/.match(mention['cite']).to_s
+              thisuri = RDF::URI('http://liicornell.org/liiscotus/' + chopped.gsub(/\s+/,'_'))
+              graph << [puri, clsauthor.refSCOTUS,thisuri]
               graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
             when 'topn'
               # look up dbPedia entry
@@ -286,7 +307,7 @@ class SSRNAbstractPage
               thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refPopName,thisuri]
             else
-              graph << [puri, clsauthor.citedPage,URI::encode(mention['url'])]
+              graph << [puri, clsauthor.citedPage,URI::encode(mention['url'])] unless mention['url'].nil?
           end
         end
       end
@@ -334,13 +355,15 @@ class SSRNAuthorPage
     rescue Exception => e
       puts e.message
       puts e.backtrace.inspect
+      return nil
     end
     # SSRN throws javascript in at the top, just as it does on the Abstract pages, but this time there's not even a
     # DOCTYPE declaration. *sigh*
     html.sub!(/^.*<html/m,'<html')
     # also, too, bogus <nobr> tags
     html.gsub!(/<\/*nobr>/m, '')
-    clean_html = SimpleTidy.clean(html, :force_output => true)
+   # clean_html = SimpleTidy.clean(html, :force_output => true)
+    clean_html = Nokogiri::HTML(html).to_html
     @doc = Nokogiri::HTML(clean_html)
   end
 
@@ -544,6 +567,7 @@ class CLSAuthorSpreadsheet
     @author_list.each do |author|
       next if author.ssrnAuthorID.empty?
       page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      next if page.nil?
       page.scrape
       page.process_abstracts
     end
