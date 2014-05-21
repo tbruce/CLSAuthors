@@ -241,7 +241,7 @@ class SSRNAbstractPage
     cite_json = c.body_str
 
     # kill the file and the directory
-    File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
+    File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")      #bibbity
 
     # run a check on the conversion.  usual problem is PHP uploading error.
     jary = JSON.parse(cite_json)
