@@ -12,3 +12,17 @@ Someday
 
  -- add Federal agency name extraction to PDFs
  -- can leverage "people who downloaded this also downloaded" feature of paper abstracts
+
+
+ Citationer notes
+
+ Citationer currently returns three types of response
+
+ -- a "standard" response consisting of a key and an array of hashes containing citation information
+ -- an "error" response consisting of PHP error information (looks like this:
+    "{"SSRN-id2041517.pdf.part":{"error":{"type":"PHP_UPLOAD_ERR","code":3,"emsg":"The uploaded file was only partially uploaded"}}}")
+ -- a "blank" response consisting of a key and an empty array.
+
+ I suspect the "blank" response happens when there's an uncaught (and probably unsuspected) error in citationer. It
+ would be good to figure out what causes this and send an error-type response with diagnostic information instead of
+ the blank response.

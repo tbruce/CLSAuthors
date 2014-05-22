@@ -36,7 +36,7 @@ GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
 
 # services
 CITATIONER_URI='http://mojo.law.cornell.edu/services/citationer/'
-DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search/PrefixSearch?QueryClass=&MaxHits=5&QueryString='
+DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search.asmx/KeywordSearch?QueryString='
 
 require 'rubygems'
 require 'net/http'
@@ -241,15 +241,20 @@ class SSRNAbstractPage
     cite_json = c.body_str
 
     # kill the file and the directory
-    File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")      #bibbity
+    File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
 
-    # run a check on the conversion.  usual problem is PHP uploading error.
+    # see if the conversion ran right.  usual problem is PHP uploading error.
     jary = JSON.parse(cite_json)
-    return unless jary.first()[myfile].defined?
-    if jary[myfile]['error'].defined?
+
+  return if jary.empty?     # got nothing
+  return if jary.first()[1].empty?       # got response with key but no value
+  unless jary[myfile].nil?
+    unless jary[myfile]['error'].nil?
       $stderr.puts "File #{myfile} throws error " + jary[myfile]['error']['type'] + " with message " + jary[myfile]['error']['emsg']
       return
     end
+  end
+
 
     # process json from citationer
     create_citation_triples(cite_json)
@@ -281,10 +286,12 @@ class SSRNAbstractPage
             #  $stderr.puts "Citationer did not handle: " + mention['matched'].to_s
               # this is a reference that Citationer did not know how to handle....
             when 'cfr'
-              thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
+              chopped = /\(/.match(mention['cite']).pre_match
+              thisuri = RDF::URI('http://liicornell.org/liicfr/' + chopped.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refCFR,thisuri]
             when 'usc'
-              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + mention['cite'].gsub(/\s+/,'_'))
+              chopped = /\(/.match(mention['cite']).pre_match
+              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + chopped.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refUSCode,thisuri]
             when 'statl'
               thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/,'_'))
@@ -301,7 +308,12 @@ class SSRNAbstractPage
               c = Curl.get(looker) do |c|
                 c.headers['Accept'] = 'application/json'
               end
+              # unfortunately, the QueryClass parameter for dbPedia lookups is not much help, since class information
+              # is often missing.  Best alternative is to use a filter based on dbPedia categories.  Crudely implemented
+              # here as a string match against a series of keywords
+
               JSON.parse(c.body_str)['results'].each do |entry|
+                next unless c.body_str =~ /\b(law|legislation|government|Act)\b/
                 graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]
               end
               thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
