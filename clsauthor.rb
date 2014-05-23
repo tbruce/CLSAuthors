@@ -286,12 +286,12 @@ class SSRNAbstractPage
             #  $stderr.puts "Citationer did not handle: " + mention['matched'].to_s
               # this is a reference that Citationer did not know how to handle....
             when 'cfr'
-              chopped = /\(/.match(mention['cite']).pre_match
-              thisuri = RDF::URI('http://liicornell.org/liicfr/' + chopped.gsub(/\s+/,'_'))
+              mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
+              thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refCFR,thisuri]
             when 'usc'
-              chopped = /\(/.match(mention['cite']).pre_match
-              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + chopped.gsub(/\s+/,'_'))
+              mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
+              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + mention['cite'].gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refUSCode,thisuri]
             when 'statl'
               thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/,'_'))
@@ -313,8 +313,11 @@ class SSRNAbstractPage
               # here as a string match against a series of keywords
 
               JSON.parse(c.body_str)['results'].each do |entry|
-                next unless c.body_str =~ /\b(law|legislation|government|Act)\b/
-                graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]
+                use_me = false
+                entry['categories'].each do |cat|
+                  use_me = true if cat =~ /\b(law|legislation|government|Act)\b/
+                end
+                graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]  if use_me
               end
               thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refPopName,thisuri]
