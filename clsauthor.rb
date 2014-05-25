@@ -664,7 +664,7 @@ class CLSAuthorRunner
 
     # clean up
     if @opts.cited || @opts.test_abstract
-      # kill off the browser simulator
+      # kill off the browser   simulator
       b.close
       headless.destroy
       Dir.unlink("#{stashdir}")
