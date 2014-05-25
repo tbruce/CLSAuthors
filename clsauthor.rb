@@ -315,7 +315,7 @@ class SSRNAbstractPage
               JSON.parse(c.body_str)['results'].each do |entry|
                 use_me = false
                 entry['categories'].each do |cat|
-                  use_me = true if cat =~ /\b(law|legislation|government|Act)\b/
+                  use_me = true if cat['label'] =~ /\b(law|legislation|government|Act)\b/
                 end
                 graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]  if use_me
               end
