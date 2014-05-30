@@ -121,8 +121,12 @@ class SSRNAbstractPage
   #-- get interesting metatag content
   def scrape_metas
       @title = @doc.at_xpath("//meta[@name='citation_title']")["content"]
-      @online_date = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
-      @pub_date = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
+      scratch = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
+      scratch = Chronic.parse(scratch) unless scratch.nil?
+      @online_date= scratch.iso8601 unless scratch.nil?
+      scratch = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
+      scratch = Chronic.parse(scratch) unless scratch.nil?
+      @pub_date = scratch.iso8601 unless scratch.nil?
       @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
       @doi = nil if @doi && @doi.empty?     #for unknown reasons this sometimes pulls a blank
       @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
@@ -180,15 +184,15 @@ class SSRNAbstractPage
         graph << [myuri, DC.contributor, RDF::URI(@cls_author_uri)]
         graph << [myuri,RDF.type,bibo.Article]
         graph << [myuri,clsauthor.abstractPage,@url]
-        graph << [myuri,DC.abstract,@abstract] if @abstract
-        graph << [myuri,clsauthor.ssrnOnlineDate,@online_date] if @online_date
-        graph << [myuri,clsauthor.ssrnPubDate,@pub_date] if @pub_date
-        graph << [myuri,bibo.doi,@doi] if @doi
-        graph << [myuri,DC.title,@title] if @title
-        graph << [myuri,clsauthor.ssrnAbsViewCount,@abstract_views] if @abstract_views
-        graph << [myuri,clsauthor.ssrnDLCount, @paper_dls] if @paper_dls
-        graph << [myuri,clsauthor.ssrnCitationCount,@paper_citations] if @paper_citations
-        graph << [myuri,clsauthor.ssrnFNCount,@paper_citations] if @paper_citations
+        graph << [myuri,DC.abstract,@abstract] unless @abstract.nil?
+        graph << [myuri,clsauthor.ssrnOnlineDate,@online_date] unless @online_date.nil?
+        graph << [myuri,clsauthor.ssrnPubDate,@pub_date] unless @pub_date.nil?
+        graph << [myuri,bibo.doi,@doi] unless @doi.nil?
+        graph << [myuri,DC.title,@title] unless @title.nil?
+        graph << [myuri,clsauthor.ssrnAbsViewCount,@abstract_views]unless @abstract_views.nil?
+        graph << [myuri,clsauthor.ssrnDLCount, @paper_dls] unless @paper_dls.nil?
+        graph << [myuri,clsauthor.ssrnCitationCount,@paper_citations] unless @paper_citations.nil?
+        graph << [myuri,clsauthor.ssrnFNCount,@paper_footnotes] unless @paper_citations.nil?
         graph << [myuri, clsauthor.ssrnDLRank,@dl_rank] if @dl_rank
         @keywords.each do |subj|
           # normalize to lowercase
