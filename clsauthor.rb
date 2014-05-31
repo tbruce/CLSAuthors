@@ -234,6 +234,7 @@ class SSRNAbstractPage
     while  File.exist?("#{stashdir}/#{myfile}.part")
       sleep(1)
     end
+
     # send the file to citationer
     c = Curl::Easy.new(CITATIONER_URI)
     c.multipart_form_post = true
@@ -243,6 +244,7 @@ class SSRNAbstractPage
       return
     end
     cite_json = c.body_str
+    filesize = File.size("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
 
     # kill the file and the directory
     File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
@@ -254,7 +256,7 @@ class SSRNAbstractPage
   return if jary.first()[1].empty?       # got response with key but no value
   unless jary[myfile].nil?
     unless jary[myfile]['error'].nil?
-      $stderr.puts "File #{myfile} throws error " + jary[myfile]['error']['type'] + " with message " + jary[myfile]['error']['emsg']
+      $stderr.puts "File #{myfile} throws error " + jary[myfile]['error']['type'] + " with message " + jary[myfile]['error']['emsg'] + ". Filesize is #{filesize} bytes."
       return
     end
   end
