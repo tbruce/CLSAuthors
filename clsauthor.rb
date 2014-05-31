@@ -398,7 +398,7 @@ class SSRNAuthorPage
     @lastName.gsub!(/,$/,'')
   end
 
-  #-- process each of the abstracts listed on the page
+  #-- process each of the abstracts listed on the   page
 
   def process_abstracts
     @abstractlist.each do |absnum|
