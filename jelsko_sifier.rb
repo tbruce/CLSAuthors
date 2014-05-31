@@ -35,17 +35,13 @@ class JELSKOSifier
       writer << RDF::Graph.new do |graph|
         #iterate through the list of keys
         @jelterms.each do |term|
-          #everything that begins with X is a narrower term for X00
-          t = term[0]
-          graph << [RDF::URI(JELS_CLS_PREFIX + t + '00'), SKOS.narrower, RDF::URI(JELS_CLS_PREFIX + term)] if term[1..2] != '00'
-          # if it has a zero in the second place, skip to the next
-          next if term[1] == '0'
-          #everything that does not end in zero is a narrower term for a string that has the same first two characters and
-          # *does* end in zero
-          brd = term[0..1] + '0'
-          graph << [RDF::URI(JELS_CLS_PREFIX + brd), SKOS.narrower, RDF::URI(JELS_CLS_PREFIX + term)]
+          next unless term =~ /[1-9]+/
+          # everything that is broader than me has a zero in the last place where I have an integer, and is like me up to that point
+          broader_term = term.dup
+          lasti = term.rindex(/[1-9]/)
+          broader_term[lasti] = "0"
+          graph << [RDF::URI(JELS_CLS_PREFIX + broader_term), SKOS.narrower, RDF::URI(JELS_CLS_PREFIX + term)]
         end
-
       end
     end
   end
