@@ -106,7 +106,15 @@ EOQ
        q = q + " "
        q = q + myuri
        q = q + " . } } }"
-     results = @sparql.query(q)
+    begin
+      results = @sparql.query(q)
+    rescue Exception => e
+      puts "for URI #{uri} :"
+      puts e.message
+      puts e.backtrace.inspect
+      return
+    end
+
      # write
      f = File.new(mydir+"/scholarship.json","w")
      f << results.to_json
