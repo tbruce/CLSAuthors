@@ -35,7 +35,7 @@ GOOGLE_PWD='crankmaster'
 GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
 
 # services
-CITATIONER_URI='http://mojo.law.cornell.edu/services/citationer/'
+CITATIONER_URI='http://gulo.law.cornell.edu/services/citationer/'
 DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search.asmx/KeywordSearch?QueryString='
 
 require 'rubygems'
@@ -55,7 +55,7 @@ include RDF
 require 'rdf/ntriples'
 require 'digest/md5'
 require 'open-uri'
-require 'roman-numerals'
+#require 'roman-numerals'
 
 
 #-- class for representing/modeling some SSRN abstract pages
@@ -293,8 +293,15 @@ class SSRNAbstractPage
             #  $stderr.puts "Citationer did not handle: " + mention['matched'].to_s
               # this is a reference that Citationer did not know how to handle....
             when 'cfr'
-              mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
-              thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
+              # correctly handle "part" type citations
+              if mention['cite'] =~ /Part/
+                #create the cite for the part itself
+                mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
+                thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_').gsub(/Part/,'part'))
+              else
+                mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
+                thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
+              end
               graph << [puri, clsauthor.refCFR,thisuri]
             when 'usc'
               mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
@@ -487,14 +494,14 @@ class CLSAuthor
          # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
          # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
          # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
-          graph << [myuri, clsauthor.gPlusProfile,RDF::URI(GPLUS_URI_PREFIX+@gScholarID) ]
+          graph << [myuri, clsauthor.gPlusProfile,"GPLUS_URI_PREFIX+@gScholarID" ]
         end
 
         unless @gScholarID.empty?
          # fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
          # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
          # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
-          graph << [myuri, clsauthor.gScholarPage, RDF::URI(GSCHOLAR_URI_PREFIX + @gScholarID)]
+          graph << [myuri, clsauthor.gScholarPage, "GSCHOLAR_URI_PREFIX + @gScholarID"]
         end
 
         unless @openGraphID.empty?
@@ -518,7 +525,7 @@ class CLSAuthor
           #fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
           #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
           #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
-          graph << [myuri, clsauthor.linkedInProfile, RDF::URI(@linkedInProfile)]
+          graph << [myuri, clsauthor.linkedInProfile, @linkedInProfile]
         end
 
 

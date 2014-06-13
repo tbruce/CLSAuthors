@@ -1,4 +1,5 @@
 SCHOLARSHIP_ENDPOINT='http://174.129.152.17:8080/openrdf-sesame/repositories/tomscholar2'
+CFR_ENDPOINT='http://23.22.254.142:8080/openrdf-sesame/repositories/CFR_structure'
 JSON_ROOT_DIRECTORY='/var/data/json'
 
 require 'rdf'
@@ -36,8 +37,17 @@ class ScholarJsonFactory
     result.each do |item|
      o = item[:o].to_s
      uri_list.push(o)
+     #if it's a CFR part reference, expand it to all the sections
+     if type == 'CFR' && o =~ /_part_/
+      cfrsparq = SPARQL::Client.new(CFR_ENDPOINT)
+      result = cfrsparq.query("SELECT DISTINCT ?s WHERE { ?s <http://liicornell.org/liicfr/belongsTo> #{o} .}")
+      result.each do |item|
+        s = item[:s].to_s
+        uri_list.push(item[:s].to_s)
+      end
+     end
     end
-    return uri_list
+    return uri_list.uniq!
   end
   def do_item(uri, type)
      # construct the path, filename
