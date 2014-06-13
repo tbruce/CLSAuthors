@@ -55,6 +55,7 @@ include RDF
 require 'rdf/ntriples'
 require 'digest/md5'
 require 'open-uri'
+require 'roman-numerals'
 
 
 #-- class for representing/modeling some SSRN abstract pages
@@ -327,7 +328,33 @@ class SSRNAbstractPage
               end
               thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
               graph << [puri, clsauthor.refPopName,thisuri]
-            else
+            else #it's something headed for Jureeka, probably a non-Supremes case or...
+              # create URI-based Constitutional references from stuff like
+              # http://www.law.cornell.edu/jureeka/index.php?doc=Constitutions&juris=U.S.&part=art.&art=%20I&sec=8&cl=12
+              # http://www.law.cornell.edu/jureeka/index.php?doc=Constitutions&juris=U.S.&part=amend.&art=%20X&sec=&cl=
+              if mention['url'] =~ /doc=Constitutions&juris=U\.S\./
+                p = Hash.new()
+                uristr =  'http://liicornell.org/liiconstitution/'
+                parts_ary = mention['url'].split(/\&/)
+                parts_ary.shift
+
+                  parts_ary.each do |part|
+                    key, value = part.split(/=/)
+                    p['key'] = value
+                  end
+                  unless p['art'].nil?
+                    p['art'].sub!(/^%20/,'')
+                    uristr = uristr + 'article_'+ p['art'] if p['part'] == 'art.'
+                    uristr = uristr + 'amendment_'+ p['art'] if p['part'] == 'amend.'
+                    uristr = uristr + 'section_' + p['sec'] unless p['sec'].empty?
+                    uristr = uristr + 'clause_' + p['cl'] unless p['cl'].empty?
+                  else
+                  uristr = uristr + 'all'
+                  end
+                thisuri = RDF::URI(uristr)
+                graph << [ puri, clsauthor.refConstitution, thisuri]
+              end
+              # default
               graph << [puri, clsauthor.citedPage,URI::encode(mention['url'])] unless mention['url'].nil?
           end
         end
@@ -453,6 +480,7 @@ class CLSAuthor
         graph << [myuri, clsauthor.deathYear, @deathYear] unless @deathYear.empty?
         graph << [myuri, FOAF.givenName, @firstName] unless @firstName.empty?
         graph << [myuri, clsauthor.middlename, @middleName] unless @middleName.empty?
+        graph << [myuri, FOAF.name, @firstName + ' ' + @lastName] unless (@firstName.empty? || @lastName.empty?)
         graph << [myuri, FOAF.familyName, @lastName] unless @lastName.empty?
 
        unless @gPlusID.empty?
@@ -662,7 +690,7 @@ class CLSAuthorRunner
     # do stuff
     run_authors if @opts.authors
     run_papers if @opts.abstracts
-    run_authors_papers_with_citations if @opts.cited
+    run_citations if @opts.cited
     test_abstract_page if @opts.test_abstract
     test_paperlist if @opts.test_author
     test_spreadsheet if @opts.test_spreadsheet
@@ -700,7 +728,7 @@ class CLSAuthorRunner
   def run_papers
     @sheet.process_papers
   end
-  def run_authors_papers_with_citations
+  def run_citations
      @sheet.process_extract_citations(@browser,@stashdir)
   end
   # limited set of authors for demo
