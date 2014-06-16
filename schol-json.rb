@@ -105,7 +105,7 @@ class ScholarJsonFactory
     # did we do this one already?
     return if File.exists?(mydir + '/scholarship.json')
 
-    @cleanpath_file <<  "#{pathprefix}/text/#{vol_or_title}/#{page_or_section}\n"
+    @cleanpath_file <<  "#{pathprefix}/text/#{vol_or_title}/#{pg_or_section}\n"
 
     Dir.mkdir(parentdir) unless Dir.exist?(parentdir)
     Dir.mkdir(mydir) unless Dir.exist?(mydir)
