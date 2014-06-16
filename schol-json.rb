@@ -1,31 +1,35 @@
 SCHOLARSHIP_ENDPOINT='http://174.129.152.17:8080/openrdf-sesame/repositories/tomscholar2'
 CFR_ENDPOINT='http://23.22.254.142:8080/openrdf-sesame/repositories/CFR_structure'
 JSON_ROOT_DIRECTORY='/var/data/json'
+CLEANPATH_FILE = '/home/tom/Dropbox/Scholarship/output/scholarship.cleanpath.whacker.txt'
 
+require 'fileutils'
 require 'rdf'
+require 'find'
 include RDF
 require 'sparql'
-#require 'sparql/client'
 require 'linkeddata'
 
 class ScholarJsonFactory
   def initialize
     @sparql = SPARQL::Client.new(SCHOLARSHIP_ENDPOINT)
-    check_needed_dirs
+    @cfrsparql = SPARQL::Client.new(CFR_ENDPOINT)
+    @json_sparql = SPARQL::Client.new(SCHOLARSHIP_ENDPOINT)
+    #initialize the directory structure, including killing all the old stuff
+    reset_dirs()
+    # file to store cleanpaths for cache-whacking
+    @cleanpath_file = File.new(CLEANPATH_FILE, 'w')
   end
 
   def run
     ['CFR', 'USC', 'SCOTUS'].each do |type|
-      uris = get_uri_list(type)
-      uris.each do |uri|
-        do_item(uri, type)
-      end
+      run_uri_list(type)
     end
   end
 
-  # grabs list of all cited-to URIs for CFR, US Code, Supreme Court
-  def get_uri_list(type)
-    uri_list = Array.new
+  # processes all cited-to URIs for CFR, US Code, Supreme Court
+  def run_uri_list(type)
+    expansion_list = Array.new
     case type
       when 'CFR'
         predicate = '<http://liicornell.org/liischolar/refCFR>'
@@ -40,24 +44,27 @@ class ScholarJsonFactory
       o = item[:o].to_s
       # cleanup of bad USC URIs from Citationer
       o.gsub!(/_USC_A\._/, '_USC_')
-      uri_list.push(SkolURI.new(o,o))
-      puts "#{o}\n"
-      #if it's a CFR part or subpart reference, expand it to all the sections
-      if type == 'CFR' && o =~ /_(subpart|part)_/
-        cfrsparq = SPARQL::Client.new(CFR_ENDPOINT)
-        q = "SELECT DISTINCT ?s WHERE { ?s  <http://liicornell.org/liicfr/belongsToTransitive> <#{o}> . }"
-        puts "#{q}\n"
-        cfrresult = cfrsparq.query(q)
-        cfrresult.each do |partitem|
-          uri_list.push(SkolURI.new(partitem[:s].to_s, o))
-        end
+
+      # get the JSON
+      do_item(o, o, type)
+
+      #if it's a CFR part or subpart reference, stick it in the list for expansion
+      expansion_list.push(o) if type == 'CFR' && o =~ /_(subpart|part)_/
+    end
+
+    #run actual URI list
+    # now run the list of "expandable"  URIs
+    expansion_list.each do |o|
+      q = "SELECT DISTINCT ?s WHERE { ?s  <http://liicornell.org/liicfr/belongsToTransitive> <#{o}> . }"
+      result = @cfrsparql.query(q)
+      result.each do |item|
+        do_item(item[:s].to_s, o, type)
       end
 
     end
-    return uri_list.uniq
   end
 
-  def do_item(uri_object, type)
+  def do_item(filename_uri, lookup_uri, type)
     # construct the path, filename
     rootdir = ''
     myprop = ''
@@ -69,18 +76,21 @@ class ScholarJsonFactory
         uristart = 'cfr:'
         urimid = '_CFR_'
         myprop = 'refCFR'
+        pathprefix = 'cfr'
       when 'USC'
         rootdir = JSON_ROOT_DIRECTORY + '/uscode'
         uristart = 'usc:'
         urimid = '_USC_'
         myprop = 'refUSCode'
+        pathprefix = 'uscode'
       when 'SCOTUS'
         rootdir = JSON_ROOT_DIRECTORY + '/supremecourt'
         uristart = 'scotus:'
         urimid = '_US_'
         myprop = 'refSCOTUS'
+        pathprefix = 'supremecourt'
     end
-    parts = uri_object.jsonuri.split('/')
+    parts = filename_uri.split('/')
     cite = parts.pop
     if type == 'CFR' && cite =~ /_part_/
       vol_or_title, midbit, partplc, pg_or_section = cite.split('_')
@@ -89,12 +99,16 @@ class ScholarJsonFactory
       vol_or_title, midbit, pg_or_section = cite.split('_')
     end
 
-
     parentdir = rootdir + '/' + vol_or_title
     mydir = parentdir + '/' + pg_or_section
+
+    # did we do this one already?
+    return if File.exists?(mydir + '/scholarship.json')
+
+    @cleanpath_file <<  "#{pathprefix}/text/#{vol_or_title}/#{page_or_section}\n"
+
     Dir.mkdir(parentdir) unless Dir.exist?(parentdir)
     Dir.mkdir(mydir) unless Dir.exist?(mydir)
-
     myuri = uristart + vol_or_title + urimid + pg_or_section
 
     # get the JSON
@@ -127,43 +141,42 @@ class ScholarJsonFactory
 EOQ
     q.rstrip! # looks like heredoc adds whitespace in ruby
     q = q + myprop
-    q = q + " "
-    q = q + myuri
-    q = q + " . } } }"
+    q = q + ' '
+    q = q + "<#{lookup_uri}>"
+    q = q + ' . } } }'
     begin
-      results = @sparql.query(q)
+      results = @json_sparql.query(q)
     rescue Exception => e
-      $stderr.puts "for URI #{uri} :"
+      $stderr.puts "JSON query blew out for URI #{lookup_uri} :"
       $stderr.puts e.message
       $stderr.puts e.backtrace.inspect
       return
     end
 
     # write
-    f = File.new(mydir+"/scholarship.json", "w")
+    $stderr.puts "Creating file #{mydir}/scholarship.json \n"
+    f = File.new(mydir + '/scholarship.json', 'w')
     f << results.to_json
     f.close
   end
 
-  # make sure we have the directories we need
+# make sure we have the directories we need
 
-  def check_needed_dirs
+  def reset_dirs
     Dir.mkdir(JSON_ROOT_DIRECTORY) unless Dir.exist?(JSON_ROOT_DIRECTORY)
+
     Dir.mkdir(JSON_ROOT_DIRECTORY + '/cfr') unless Dir.exist?(JSON_ROOT_DIRECTORY + '/cfr')
     Dir.mkdir(JSON_ROOT_DIRECTORY + '/uscode') unless Dir.exist?(JSON_ROOT_DIRECTORY + '/uscode')
     Dir.mkdir(JSON_ROOT_DIRECTORY + '/supremecourt') unless Dir.exist?(JSON_ROOT_DIRECTORY + '/supremecourt')
+
+    Find.find(JSON_ROOT_DIRECTORY) do |path|
+      FileUtils.rm_f(path) if path =~ /scholarship\.json/
+    end
+
   end
 
 end
 
-class SkolURI
-  attr_reader :uri, :jsonuri
-
-  def initialize (myuri, myjsonuri)
-    @uri = myuri
-    @jsonuri = myjsonuri
-  end
-end
 
 factory = ScholarJsonFactory.new()
 factory.run

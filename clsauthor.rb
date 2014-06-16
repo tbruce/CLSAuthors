@@ -1,11 +1,7 @@
-
 #-- This code makes some assumptions.
 # -- SSRN URLs follow the templates described by the constants defined below
 # -- There is no paging of the list of papers displayed by an author page -- that is, all of an author's papers are
 #    listed on a single page, no matter how many there are.
-
-
-
 
 
 # location of vocabularies that are not built into RDF::Writer
@@ -61,7 +57,7 @@ require 'open-uri'
 #-- class for representing/modeling some SSRN abstract pages
 
 class SSRNAbstractPage
-  attr_reader :paper_id,:author_id,:url,:keywords,:jelcodes,:coauthors,:abstract,:online_date,:pub_date,:doi,:title,:pdf_url
+  attr_reader :paper_id, :author_id, :url, :keywords, :jelcodes, :coauthors, :abstract, :online_date, :pub_date, :doi, :title, :pdf_url
 
   def initialize(my_id, my_ssrn_author_id, my_cls_author_uri)
     @paper_id = my_id
@@ -100,7 +96,7 @@ class SSRNAbstractPage
       $stderr.puts e.backtrace.inspect
     end
     # SSRN throws javascript in *before* the DOCTYPE declaration, believe it or not.  we don't need it, so...
-    html.sub!(/^.*<!DOCTYPE/m,'<!DOCTYPE')
+    html.sub!(/^.*<!DOCTYPE/m, '<!DOCTYPE')
     # also, too, bogus <nobr> tags
     html.gsub!(/<\/*nobr>/m, '')
 
@@ -121,16 +117,16 @@ class SSRNAbstractPage
 
   #-- get interesting metatag content
   def scrape_metas
-      @title = @doc.at_xpath("//meta[@name='citation_title']")["content"]
-      scratch = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
-      scratch = Chronic.parse(scratch) unless scratch.nil?
-      @online_date= scratch.strftime("%F") unless scratch.nil?
-      scratch = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
-      scratch = Chronic.parse(scratch) unless scratch.nil?
-      @pub_date = scratch.strftime("%F") unless scratch.nil?
-      @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
-      @doi = nil if @doi && @doi.empty?     #for unknown reasons this sometimes pulls a blank
-      @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
+    @title = @doc.at_xpath("//meta[@name='citation_title']")["content"]
+    scratch = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
+    scratch = Chronic.parse(scratch) unless scratch.nil?
+    @online_date= scratch.strftime("%F") unless scratch.nil?
+    scratch = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
+    scratch = Chronic.parse(scratch) unless scratch.nil?
+    @pub_date = scratch.strftime("%F") unless scratch.nil?
+    @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
+    @doi = nil if @doi && @doi.empty? #for unknown reasons this sometimes pulls a blank
+    @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
   end
 
   #-- get paper statistics
@@ -142,7 +138,7 @@ class SSRNAbstractPage
     end
     idx = 0
     @doc.css("span.statNumber").each do |stat|
-      num = stat.inner_text().gsub!(/[^0-9]/,'')
+      num = stat.inner_text().gsub!(/[^0-9]/, '')
       @abstract_views = num if @labels[idx] =~ /Views/
       @paper_dls = num if @labels[idx] =~ /Downloads/
       @paper_citations = num if @labels[idx] =~ /Citations/
@@ -155,15 +151,15 @@ class SSRNAbstractPage
   #-- get SSRN IDs of coauthors
   def scrape_authors
     @doc.xpath("//center/font/a[@title='View other papers by this author']").each do |link|
-      auth_id =  /per_id=([0-9]+)/.match(link['href'])[1]
-       @coauthors.push(auth_id) unless auth_id.eql?(@ssrn_author_id)
+      auth_id = /per_id=([0-9]+)/.match(link['href'])[1]
+      @coauthors.push(auth_id) unless auth_id.eql?(@ssrn_author_id)
     end
   end
 
   def scrape_abstract
-      elem = @doc.at_xpath("//div/div/div/font")
-      return unless elem
-      @abstract = elem.inner_text()
+    elem = @doc.at_xpath("//div/div/div/font")
+    return unless elem
+    @abstract = elem.inner_text()
   end
 
   def scrape_jelcodes
@@ -183,33 +179,33 @@ class SSRNAbstractPage
     RDF::Writer.for(:ntriples).new() do |writer|
       writer << RDF::Graph.new do |graph|
         graph << [myuri, DC.contributor, RDF::URI(@cls_author_uri)]
-        graph << [myuri,RDF.type,bibo.Article]
-        graph << [myuri,clsauthor.abstractPage,@url]
-        graph << [myuri,DC.abstract,@abstract] unless @abstract.nil?
-        graph << [myuri,clsauthor.ssrnOnlineDate,@online_date] unless @online_date.nil?
-        graph << [myuri,clsauthor.ssrnPubDate,@pub_date] unless @pub_date.nil?
-        graph << [myuri,bibo.doi,@doi] unless @doi.nil?
-        graph << [myuri,DC.title,@title] unless @title.nil?
-        graph << [myuri,clsauthor.ssrnAbsViewCount,@abstract_views]unless @abstract_views.nil?
-        graph << [myuri,clsauthor.ssrnDLCount, @paper_dls] unless @paper_dls.nil?
-        graph << [myuri,clsauthor.ssrnCitationCount,@paper_citations] unless @paper_citations.nil?
-        graph << [myuri,clsauthor.ssrnFNCount,@paper_footnotes] unless @paper_citations.nil?
-        graph << [myuri, clsauthor.ssrnDLRank,@dl_rank] if @dl_rank
+        graph << [myuri, RDF.type, bibo.Article]
+        graph << [myuri, clsauthor.abstractPage, @url]
+        graph << [myuri, DC.abstract, @abstract] unless @abstract.nil?
+        graph << [myuri, clsauthor.ssrnOnlineDate, @online_date] unless @online_date.nil?
+        graph << [myuri, clsauthor.ssrnPubDate, @pub_date] unless @pub_date.nil?
+        graph << [myuri, bibo.doi, @doi] unless @doi.nil?
+        graph << [myuri, DC.title, @title] unless @title.nil?
+        graph << [myuri, clsauthor.ssrnAbsViewCount, @abstract_views] unless @abstract_views.nil?
+        graph << [myuri, clsauthor.ssrnDLCount, @paper_dls] unless @paper_dls.nil?
+        graph << [myuri, clsauthor.ssrnCitationCount, @paper_citations] unless @paper_citations.nil?
+        graph << [myuri, clsauthor.ssrnFNCount, @paper_footnotes] unless @paper_citations.nil?
+        graph << [myuri, clsauthor.ssrnDLRank, @dl_rank] if @dl_rank
         @keywords.each do |subj|
           # normalize to lowercase
           subj.downcase!
-          graph << [myuri,DC.subject, subj]
+          graph << [myuri, DC.subject, subj]
         end
         @jelcodes.each do |jel|
-          graph << [RDF::URI(LII_JEL_URI_PREFIX + jel), RDF.type, clsauthor.JelClass ]
-          graph << [myuri,clsauthor.jelClass, RDF::URI(LII_JEL_URI_PREFIX + jel)]
+          graph << [RDF::URI(LII_JEL_URI_PREFIX + jel), RDF.type, clsauthor.JelClass]
+          graph << [myuri, clsauthor.jelClass, RDF::URI(LII_JEL_URI_PREFIX + jel)]
         end
         @coauthors.each do |scribbler|
           scribURI = RDF::URI(LII_SSRN_AUTHOR_URI_PREFIX + scribbler)
-          graph << [scribURI, RDF.type, clsauthor.SSRNAuthor ]
+          graph << [scribURI, RDF.type, clsauthor.SSRNAuthor]
           graph << [myuri, DC.contributor, scribURI]
           # stick in name information, just to be informative
-          coauthpage = SSRNAuthorPage.new(scribbler,scribURI)
+          coauthpage = SSRNAuthorPage.new(scribbler, scribURI)
           coauthpage.scrape
           graph << [scribURI, FOAF.givenName, coauthpage.firstName]
           graph << [scribURI, FOAF.familyName, coauthpage.lastName]
@@ -218,11 +214,11 @@ class SSRNAbstractPage
     end
   end
 
-  def extract_paper_citations(b,stashdir)
+  def extract_paper_citations(b, stashdir)
     b.goto @url
     # grab the PDF file
     begin
-      b.link(:class,"downloadBt").click
+      b.link(:class, "downloadBt").click
     rescue StandardError
       return
     end
@@ -232,7 +228,7 @@ class SSRNAbstractPage
     end
     # wait for DL to complete
     myfile = "SSRN-id#{@paper_id}.pdf"
-   # myfile = Dir.entries("#{stashdir}").grep(/^SSRN/).first()
+    # myfile = Dir.entries("#{stashdir}").grep(/^SSRN/).first()
     while  File.exist?("#{stashdir}/#{myfile}.part")
       sleep(1)
     end
@@ -246,9 +242,9 @@ class SSRNAbstractPage
     c.multipart_form_post = true
     begin
       c.http_post(
-          Curl::PostField.content('format','application/json'),
-          Curl::PostField.content('version','1.0'),
-          Curl::PostField.file('files',"#{stashdir}/#{myfile}")
+          Curl::PostField.content('format', 'application/json'),
+          Curl::PostField.content('version', '1.0'),
+          Curl::PostField.file('files', "#{stashdir}/#{myfile}")
       )
     rescue StandardError
       File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
@@ -268,14 +264,14 @@ class SSRNAbstractPage
     # see if the conversion ran right.  usual problem is PHP uploading error.
     jary = JSON.parse(cite_json)
 
-  return if jary.empty?     # got nothing
-  return if jary.first()[1].empty?       # got response with key but no value
-  unless jary[myfile].nil?
-    unless jary[myfile]['error'].nil?
-      $stderr.puts "File #{myfile} throws error " + jary[myfile]['error']['type'] + " with message " + jary[myfile]['error']['emsg'] + ". Filesize is #{filesize} bytes."
-      return
+    return if jary.empty? # got nothing
+    return if jary.first()[1].empty? # got response with key but no value
+    unless jary[myfile].nil?
+      unless jary[myfile]['error'].nil?
+        $stderr.puts "File #{myfile} throws error " + jary[myfile]['error']['type'] + " with message " + jary[myfile]['error']['emsg'] + ". Filesize is #{filesize} bytes."
+        return
+      end
     end
-  end
 
 
     # process json from citationer
@@ -306,7 +302,7 @@ class SSRNAbstractPage
           case mention['form']
             #when '-'
             #  $stderr.puts "Citationer did not handle: " + mention['matched'].to_s
-              # this is a reference that Citationer did not know how to handle....
+            # this is a reference that Citationer did not know how to handle....
             when 'cfr'
               # correctly handle "part" type citations
               # clean up bad USCA citations from Citationer
@@ -314,24 +310,24 @@ class SSRNAbstractPage
               if mention['cite'] =~ /Part/
                 #create the cite for the part itself
                 mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
-                thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_').gsub(/Part/,'part'))
+                thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/, '_').gsub(/Part/, 'part'))
               else
                 mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
-                thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/,'_'))
+                thisuri = RDF::URI('http://liicornell.org/liicfr/' + mention['cite'].gsub(/\s+/, '_'))
               end
-              graph << [puri, clsauthor.refCFR,thisuri]
+              graph << [puri, clsauthor.refCFR, thisuri]
             when 'usc'
               mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
-              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + mention['cite'].gsub(/\s+/,'_'))
-              graph << [puri, clsauthor.refUSCode,thisuri]
+              thisuri = RDF::URI('http://liicornell.org/liiuscode/' + mention['cite'].gsub(/\s+/, '_'))
+              graph << [puri, clsauthor.refUSCode, thisuri]
             when 'statl'
-              thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/,'_'))
-              graph << [puri, clsauthor.refStatL,thisuri]
+              thisuri = RDF::URI('http://liicornell.org/liistat/' + mention['cite'].gsub(/\s+/, '_'))
+              graph << [puri, clsauthor.refStatL, thisuri]
             when 'scotus'
               # chop off everything but volume and page reference
               chopped = /[0-9]+\s+US\s+[0-9]+/.match(mention['cite']).to_s
-              thisuri = RDF::URI('http://liicornell.org/liiscotus/' + chopped.gsub(/\s+/,'_'))
-              graph << [puri, clsauthor.refSCOTUS,thisuri]
+              thisuri = RDF::URI('http://liicornell.org/liiscotus/' + chopped.gsub(/\s+/, '_'))
+              graph << [puri, clsauthor.refSCOTUS, thisuri]
               graph << [puri, clsauthor.citedPage, RDF::URI(mention['url'])]
             when 'topn'
               # look up dbPedia entry
@@ -348,38 +344,38 @@ class SSRNAbstractPage
                 entry['categories'].each do |cat|
                   use_me = true if cat['label'] =~ /\b(law|legislation|government|Act)\b/
                 end
-                graph << [puri, clsauthor.refDBPedia,RDF::URI(entry['uri'])]  if use_me
+                graph << [puri, clsauthor.refDBPedia, RDF::URI(entry['uri'])] if use_me
               end
-              thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/,'_'))
-              graph << [puri, clsauthor.refPopName,thisuri]
+              thisuri = RDF::URI('http://liicornell.org/liitopn/' + mention['cite'].downcase.gsub(/\s+/, '_'))
+              graph << [puri, clsauthor.refPopName, thisuri]
             else #it's something headed for Jureeka, probably a non-Supremes case or...
-              # create URI-based Constitutional references from stuff like
-              # http://www.law.cornell.edu/jureeka/index.php?doc=Constitutions&juris=U.S.&part=art.&art=%20I&sec=8&cl=12
-              # http://www.law.cornell.edu/jureeka/index.php?doc=Constitutions&juris=U.S.&part=amend.&art=%20X&sec=&cl=
+                 # create URI-based Constitutional references from stuff like
+                 # http://www.law.cornell.edu/jureeka/index.php?doc=Constitutions&juris=U.S.&part=art.&art=%20I&sec=8&cl=12
+                 # http://www.law.cornell.edu/jureeka/index.php?doc=Constitutions&juris=U.S.&part=amend.&art=%20X&sec=&cl=
               if mention['url'] =~ /doc=Constitutions&juris=U\.S\./
                 p = Hash.new()
-                uristr =  'http://liicornell.org/liiconstitution/'
+                uristr = 'http://liicornell.org/liiconstitution/'
                 parts_ary = mention['url'].split(/\&/)
                 parts_ary.shift
 
-                  parts_ary.each do |part|
-                    key, value = part.split(/=/)
-                    p['key'] = value
-                  end
-                  unless p['art'].nil?
-                    p['art'].sub!(/^%20/,'')
-                    uristr = uristr + 'article_'+ p['art'] if p['part'] == 'art.'
-                    uristr = uristr + 'amendment_'+ p['art'] if p['part'] == 'amend.'
-                    uristr = uristr + 'section_' + p['sec'] unless p['sec'].empty?
-                    uristr = uristr + 'clause_' + p['cl'] unless p['cl'].empty?
-                  else
+                parts_ary.each do |part|
+                  key, value = part.split(/=/)
+                  p['key'] = value
+                end
+                unless p['art'].nil?
+                  p['art'].sub!(/^%20/, '')
+                  uristr = uristr + 'article_'+ p['art'] if p['part'] == 'art.'
+                  uristr = uristr + 'amendment_'+ p['art'] if p['part'] == 'amend.'
+                  uristr = uristr + 'section_' + p['sec'] unless p['sec'].empty?
+                  uristr = uristr + 'clause_' + p['cl'] unless p['cl'].empty?
+                else
                   uristr = uristr + 'all'
-                  end
+                end
                 thisuri = RDF::URI(uristr)
-                graph << [ puri, clsauthor.refConstitution, thisuri]
+                graph << [puri, clsauthor.refConstitution, thisuri]
               end
               # default
-              graph << [puri, clsauthor.citedPage,URI::encode(mention['url'])] unless mention['url'].nil?
+              graph << [puri, clsauthor.citedPage, URI::encode(mention['url'])] unless mention['url'].nil?
           end
         end
       end
@@ -414,7 +410,8 @@ end
 #-- class for modeling/constructing SSRN author pages
 
 class SSRNAuthorPage
-  attr_reader :ssrn_id, :abstractlist , :firstName , :lastName
+  attr_reader :ssrn_id, :abstractlist, :firstName, :lastName
+
   def initialize(my_ssrn_id, author_uri)
     @author_URI = author_uri
     @ssrn_id = my_ssrn_id
@@ -431,10 +428,10 @@ class SSRNAuthorPage
     end
     # SSRN throws javascript in at the top, just as it does on the Abstract pages, but this time there's not even a
     # DOCTYPE declaration. *sigh*
-    html.sub!(/^.*<html/m,'<html')
+    html.sub!(/^.*<html/m, '<html')
     # also, too, bogus <nobr> tags
     html.gsub!(/<\/*nobr>/m, '')
-   # clean_html = SimpleTidy.clean(html, :force_output => true)
+    # clean_html = SimpleTidy.clean(html, :force_output => true)
     clean_html = Nokogiri::HTML(html).to_html
     @doc = Nokogiri::HTML(clean_html)
   end
@@ -447,32 +444,32 @@ class SSRNAuthorPage
     end
     # get author name information
     namestring = @doc.xpath("//h1")[0].inner_text
-    @lastName,@firstName = namestring.split
-    @lastName.gsub!(/,$/,'')
+    @lastName, @firstName = namestring.split
+    @lastName.gsub!(/,$/, '')
   end
 
   #-- process each of the abstracts listed on the   page
 
   def process_abstracts
     @abstractlist.each do |absnum|
-      abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
+      abstract = SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
       abstract.scrape
       abstract.create_triples
     end
   end
 
   def process_paper_citations(browser, stashdir)
-      @abstractlist.each do |absnum|
-        abstract =  SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
-        abstract.extract_paper_citations(browser, stashdir)
-      end
+    @abstractlist.each do |absnum|
+      abstract = SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
+      abstract.extract_paper_citations(browser, stashdir)
     end
+  end
 
   #-- override to_s for diagnostic purposes
   def to_s
     strang = <<-"eos"
-     #{@abstractlist.join("\n")}
-  eos
+#{@abstractlist.join("\n")}
+    eos
   end
 end
 
@@ -480,14 +477,15 @@ end
 class CLSAuthor
   # these variables don't follow ruby conventions --  they're named to correspond to properties in the data model
   # in a vain attempt to avoid confusion
-  attr_accessor :birthYear,:deathYear,:firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
+  attr_accessor :birthYear, :deathYear, :firstName, :middleName, :lastName, :gPlusID, :gScholarID, :liiScholarID
   attr_accessor :openGraphID, :orcidID, :ssrnAuthorID, :worldCatID, :clsBio, :linkedInProfile, :homepage
-  attr_accessor :viafID, :crossRefID, :bePressID, :dbPediaID , :freeBaseID
+  attr_accessor :viafID, :crossRefID, :bePressID, :dbPediaID, :freeBaseID
+
   def initialize(author_uri)
     @liiScholarID = author_uri
-    @birthYear,@deathYear,@firstName,@middleName,@lastName,@gPlusID,@gScholarID = (0..6).map{nil}
-    @openGraphID,@orcidID,@ssrnAuthorID,@worldCatID,@clsBio,@linkedInProfile,@homepage = (0..6).map{nil}
-    @viafID,@crossRefID,@bePressID,@dbPediaID = (0..3).map{nil}
+    @birthYear, @deathYear, @firstName, @middleName, @lastName, @gPlusID, @gScholarID = (0..6).map { nil }
+    @openGraphID, @orcidID, @ssrnAuthorID, @worldCatID, @clsBio, @linkedInProfile, @homepage = (0..6).map { nil }
+    @viafID, @crossRefID, @bePressID, @dbPediaID = (0..3).map { nil }
   end
 
   #-- create triples for everything we know about the author
@@ -497,7 +495,7 @@ class CLSAuthor
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
         graph << [myuri, RDF.type, clsauthor.CLSAuthor]
-        graph << [myssrnuri, RDF.type, clsauthor.SSRNAuthor ]
+        graph << [myssrnuri, RDF.type, clsauthor.SSRNAuthor]
         graph << [myuri, OWL.sameAs, myssrnuri] unless @ssrnAuthorID.empty?
 
         graph << [myuri, clsauthor.birthYear, @birthYear] unless @birthYear.empty?
@@ -507,23 +505,23 @@ class CLSAuthor
         graph << [myuri, FOAF.name, @firstName + ' ' + @lastName] unless (@firstName.empty? || @lastName.empty?)
         graph << [myuri, FOAF.familyName, @lastName] unless @lastName.empty?
 
-       unless @gPlusID.empty?
-         # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
-         # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
-         # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
-          graph << [myuri, clsauthor.gPlusProfile, GPLUS_URI_PREFIX+@gPlusID ]
+        unless @gPlusID.empty?
+          # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
+          # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
+          # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
+          graph << [myuri, clsauthor.gPlusProfile, GPLUS_URI_PREFIX+@gPlusID]
         end
 
         unless @gScholarID.empty?
-         # fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
-         # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
-         # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
+          # fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
+          # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
+          # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
           graph << [myuri, clsauthor.gScholarPage, GSCHOLAR_URI_PREFIX + @gScholarID]
         end
 
         unless @openGraphID.empty?
-         # graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
-         # graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
+          # graph << [RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID), RDF.type, clsauthor.openGraphID]
+          # graph << [myuri, OWL.sameAs, RDF::URI(OPENGRAPH_URI_PREFIX + @openGraphID)]
         end
 
         graph << [myuri, clsauthor.orcID, @orcidID] unless @orcidID.empty?
@@ -569,14 +567,15 @@ class CLSAuthor
       end
     end
   end
+
   #-- incomplete string output for testing
   def to_s
     strang =<<-"eos"
     Last:  #{lastName}
     First: #{firstName}
     Middle: #{middleName}
-  eos
-   return strang
+    eos
+    return strang
   end
 end
 
@@ -589,7 +588,7 @@ class CLSAuthorSpreadsheet
   #TODO: this badly needs exception-handling
   # opens the author-info spreadsheet using Google Drive
   def initialize
-    session = GoogleDrive.login(GOOGLE_UID,GOOGLE_PWD)
+    session = GoogleDrive.login(GOOGLE_UID, GOOGLE_PWD)
     @ws = session.spreadsheet_by_key(GOOGLE_SPREADSHEET_KEY).worksheets[0]
     @author_list = Array.new
     @colnames = Array.new
@@ -602,10 +601,10 @@ class CLSAuthorSpreadsheet
   def populate_list
     uricol = @colnames.index("clsScholarID")+1
     for row in 2..@ws.num_rows()
-      break if @ws[row,1] =~ /Note|Stop|(^\s+)/i  || @ws[row,1].empty?
-      if (! @ws[row,uricol].empty?)
-        author = CLSAuthor.new(@ws[row,uricol])
-        populate_author(row,author)
+      break if @ws[row, 1] =~ /Note|Stop|(^\s+)/i || @ws[row, 1].empty?
+      if (!@ws[row, uricol].empty?)
+        author = CLSAuthor.new(@ws[row, uricol])
+        populate_author(row, author)
         @author_list.push(author)
       end
     end
@@ -614,51 +613,51 @@ class CLSAuthorSpreadsheet
   # populates a single author entry
   # TODO -- find out what this does with null/empty values
   def populate_author(row, author)
-    author.birthYear= @ws[row,@colnames.index("BirthYear")+1].strip
-    author.deathYear = @ws[row,@colnames.index("DeathYear")+1].strip
-    author.firstName=  @ws[row,@colnames.index("First name")+1].strip
-    author.lastName= @ws[row,@colnames.index("Last name")+1].strip
-    author.middleName= @ws[row,@colnames.index("Middle name")+1].strip
-    author.gPlusID= @ws[row,@colnames.index("googlePlusID")+1].strip
-    author.gScholarID= @ws[row,@colnames.index("googleScholarID")+1].strip
-    author.liiScholarID= @ws[row,@colnames.index("clsScholarID")+1].strip
-    author.openGraphID= @ws[row,@colnames.index("openGraphID")+1].strip
-    author.orcidID=@ws[row,@colnames.index("orcID")+1].strip
-    author.ssrnAuthorID= @ws[row,@colnames.index("ssrnID")+1].strip
-    author.worldCatID= @ws[row,@colnames.index("worldCatID")+1].strip
-    author.clsBio= @ws[row,@colnames.index("institutionBioURL")+1].strip
-    author.linkedInProfile= @ws[row,@colnames.index("linkedInProfile")+1].strip
-    author.homepage= @ws[row,@colnames.index("Homepage")+1].strip
-    author.viafID= @ws[row,@colnames.index("viafID")+1].strip
-    author.crossRefID= @ws[row,@colnames.index("crossRefID")+1].strip
-    author.bePressID = @ws[row,@colnames.index("bePressID")+1].strip
-    author.dbPediaID = @ws[row,@colnames.index("dbPediaID")+1].strip
-    author.freeBaseID = @ws[row,@colnames.index("FreeBaseID")+1].strip
+    author.birthYear= @ws[row, @colnames.index("BirthYear")+1].strip
+    author.deathYear = @ws[row, @colnames.index("DeathYear")+1].strip
+    author.firstName= @ws[row, @colnames.index("First name")+1].strip
+    author.lastName= @ws[row, @colnames.index("Last name")+1].strip
+    author.middleName= @ws[row, @colnames.index("Middle name")+1].strip
+    author.gPlusID= @ws[row, @colnames.index("googlePlusID")+1].strip
+    author.gScholarID= @ws[row, @colnames.index("googleScholarID")+1].strip
+    author.liiScholarID= @ws[row, @colnames.index("clsScholarID")+1].strip
+    author.openGraphID= @ws[row, @colnames.index("openGraphID")+1].strip
+    author.orcidID=@ws[row, @colnames.index("orcID")+1].strip
+    author.ssrnAuthorID= @ws[row, @colnames.index("ssrnID")+1].strip
+    author.worldCatID= @ws[row, @colnames.index("worldCatID")+1].strip
+    author.clsBio= @ws[row, @colnames.index("institutionBioURL")+1].strip
+    author.linkedInProfile= @ws[row, @colnames.index("linkedInProfile")+1].strip
+    author.homepage= @ws[row, @colnames.index("Homepage")+1].strip
+    author.viafID= @ws[row, @colnames.index("viafID")+1].strip
+    author.crossRefID= @ws[row, @colnames.index("crossRefID")+1].strip
+    author.bePressID = @ws[row, @colnames.index("bePressID")+1].strip
+    author.dbPediaID = @ws[row, @colnames.index("dbPediaID")+1].strip
+    author.freeBaseID = @ws[row, @colnames.index("FreeBaseID")+1].strip
   end
 
   def process_papers
     @author_list.each do |author|
       next if author.ssrnAuthorID.empty?
-      page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      page = SSRNAuthorPage.new(author.ssrnAuthorID, author.liiScholarID)
       next if page.nil?
       page.scrape
       page.process_abstracts
     end
   end
 
-  def process_extract_citations(browser,stashdir)
+  def process_extract_citations(browser, stashdir)
     @author_list.each do |author|
       next if author.ssrnAuthorID.empty?
-      page = SSRNAuthorPage.new(author.ssrnAuthorID,author.liiScholarID)
+      page = SSRNAuthorPage.new(author.ssrnAuthorID, author.liiScholarID)
       page.scrape
-      page.process_paper_citations(browser,stashdir)
+      page.process_paper_citations(browser, stashdir)
     end
   end
 
   # populates list of column names
   def get_colnames
     for col in 1..@ws.num_cols()
-      @colnames.push(@ws[1,col])
+      @colnames.push(@ws[1, col])
     end
   end
 
@@ -667,7 +666,7 @@ class CLSAuthorSpreadsheet
     clsauthor = RDF::Vocabulary.new(CLS_VOCABULARY)
     bibo = RDF::Vocabulary.new(BIBO_VOCABULARY)
     @author_list.each do |author|
-      author.create_triples(clsauthor,bibo)
+      author.create_triples(clsauthor, bibo)
     end
   end
 
@@ -728,33 +727,40 @@ class CLSAuthorRunner
       Dir.unlink("#{stashdir}")
     end
   end
+
   def test_abstract_page
-    pg = SSRNAbstractPage.new('2218855','489995')
+    pg = SSRNAbstractPage.new('2218855', '489995')
     pg.scrape
     pg.create_triples
-    pg.extract_paper_citations(@browser,@stashdir)
+    pg.extract_paper_citations(@browser, @stashdir)
     puts "#{pg}"
   end
+
   def test_paperlist
     pg = SSRNAuthorPage.new('45120')
     pg.scrape
     puts "#{pg}"
   end
+
   def test_spreadsheet
     sheet = CLSAuthorSpreadsheet.new()
     sheet.create_triples
     stuff = sheet.to_s
     puts "#{stuff}"
   end
+
   def run_authors
     @sheet.create_triples
   end
+
   def run_papers
     @sheet.process_papers
   end
+
   def run_citations
-     @sheet.process_extract_citations(@browser,@stashdir)
+    @sheet.process_extract_citations(@browser, @stashdir)
   end
+
   # limited set of authors for demo
   def demo_citations
 
@@ -769,7 +775,7 @@ Output is sent to stdout, and can be redirected into a file.
 Usage:
     clsauthor.rb [options]
 where options are:
-EOBANNER
+  EOBANNER
   opt :authors, "Generate triples for authors"
   opt :abstracts, "Generate triples for paper metadata"
   opt :cited, "Generate triples for primary law cited in papers"

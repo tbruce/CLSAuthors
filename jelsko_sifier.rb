@@ -19,6 +19,7 @@ class JELSKOSifier
     @terms_hash.shift
     @jelterms.pop()
   end
+
   def skosify_terms
     RDF::Writer.for(:ntriples).new($stdout) do |writer|
       writer << RDF::Graph.new do |graph|
