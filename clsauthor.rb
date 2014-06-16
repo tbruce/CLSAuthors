@@ -35,7 +35,7 @@ GOOGLE_PWD='crankmaster'
 GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
 
 # services
-CITATIONER_URI='http://gulo.law.cornell.edu/services/citationer/'
+CITATIONER_URI='http://54.204.218.7/service/citationer/'
 DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search.asmx/KeywordSearch?QueryString='
 
 require 'rubygems'
@@ -96,8 +96,8 @@ class SSRNAbstractPage
         raise "Abstract page #{@url} unavailable"
       end
     rescue Exception => e
-      puts e.message
-      puts e.backtrace.inspect
+      $stderr.puts e.message
+      $stderr.puts e.backtrace.inspect
     end
     # SSRN throws javascript in *before* the DOCTYPE declaration, believe it or not.  we don't need it, so...
     html.sub!(/^.*<!DOCTYPE/m,'<!DOCTYPE')
@@ -124,10 +124,10 @@ class SSRNAbstractPage
       @title = @doc.at_xpath("//meta[@name='citation_title']")["content"]
       scratch = @doc.at_xpath("//meta[@name='citation_online_date']")["content"]
       scratch = Chronic.parse(scratch) unless scratch.nil?
-      @online_date= scratch.iso8601 unless scratch.nil?
+      @online_date= scratch.strftime("%F") unless scratch.nil?
       scratch = @doc.at_xpath("//meta[@name='citation_publication_date']")["content"]
       scratch = Chronic.parse(scratch) unless scratch.nil?
-      @pub_date = scratch.iso8601 unless scratch.nil?
+      @pub_date = scratch.strftime("%F") unless scratch.nil?
       @doi = @doc.at_xpath("//meta[@name='citation_doi']")["content"]
       @doi = nil if @doi && @doi.empty?     #for unknown reasons this sometimes pulls a blank
       @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
@@ -231,17 +231,32 @@ class SSRNAbstractPage
       sleep(1)
     end
     # wait for DL to complete
-    myfile = Dir.entries("#{stashdir}").grep(/^SSRN/).first()
+    myfile = "SSRN-id#{@paper_id}.pdf"
+   # myfile = Dir.entries("#{stashdir}").grep(/^SSRN/).first()
     while  File.exist?("#{stashdir}/#{myfile}.part")
       sleep(1)
     end
 
     # send the file to citationer
     c = Curl::Easy.new(CITATIONER_URI)
+    c.http_auth_types = :basic
+    c.username = 'Arthas'
+    c.password = 'lvl90redd1tcathunter'
+    #c.perform
     c.multipart_form_post = true
     begin
-      c.http_post(Curl::PostField.file('files',"#{stashdir}/#{myfile}"))
+      c.http_post(
+          Curl::PostField.content('format','application/json'),
+          Curl::PostField.content('version','1.0'),
+          Curl::PostField.file('files',"#{stashdir}/#{myfile}")
+      )
     rescue StandardError
+      File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
+      return
+    end
+    if c.status =~ /^[45]/ || c.body_str =~ /<center>nginx/
+      File.unlink("#{stashdir}/#{myfile}") if File.exists?("#{stashdir}/#{myfile}")
+      $stderr.puts "Oversized file #{myfile}  rejected by Citationer server -- httpd response code is #{c.status}"
       return
     end
     cite_json = c.body_str
@@ -294,6 +309,8 @@ class SSRNAbstractPage
               # this is a reference that Citationer did not know how to handle....
             when 'cfr'
               # correctly handle "part" type citations
+              # clean up bad USCA citations from Citationer
+              mention['cite'].gsub!(/\s+USC\s+A\.\s+/, ' USC ')
               if mention['cite'] =~ /Part/
                 #create the cite for the part itself
                 mention['cite'] = /\(/.match(mention['cite']).pre_match if mention['cite'] =~ /\(/
@@ -408,8 +425,8 @@ class SSRNAuthorPage
       html = Net::HTTP.get(URI(SSRN_AUTHOR_PREFIX+@ssrn_id))
       raise "Author listing page for ID #{@ssrn_id} unavailable" unless html
     rescue Exception => e
-      puts e.message
-      puts e.backtrace.inspect
+      $stderr.puts e.message
+      $stderr.puts e.backtrace.inspect
       return nil
     end
     # SSRN throws javascript in at the top, just as it does on the Abstract pages, but this time there's not even a
@@ -494,14 +511,14 @@ class CLSAuthor
          # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
          # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
          # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
-          graph << [myuri, clsauthor.gPlusProfile,"GPLUS_URI_PREFIX+@gScholarID" ]
+          graph << [myuri, clsauthor.gPlusProfile, GPLUS_URI_PREFIX+@gPlusID ]
         end
 
         unless @gScholarID.empty?
          # fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
          # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
          # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
-          graph << [myuri, clsauthor.gScholarPage, "GSCHOLAR_URI_PREFIX + @gScholarID"]
+          graph << [myuri, clsauthor.gScholarPage, GSCHOLAR_URI_PREFIX + @gScholarID]
         end
 
         unless @openGraphID.empty?
@@ -535,7 +552,7 @@ class CLSAuthor
           #fakeid = RDF::URI('http://liicornell.org/viaf/' + Digest::MD5.hexdigest(@viafID))
           #graph << [fakeid, RDF.type, clsauthor.ViafPage]
           #graph << [myuri, clsauthor.hasViafPage, fakeid]
-          graph << [myuri, clsauthor.viafPage, RDF::URI(@viafID)]
+          graph << [myuri, clsauthor.viafID, RDF::URI(@viafID)]
         end
 
         graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
