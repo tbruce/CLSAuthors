@@ -36,7 +36,7 @@ DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search.asmx/KeywordSearch?Q
 
 require 'rubygems'
 require 'net/http'
-require 'simple-tidy'
+#require 'simple-tidy'
 require 'nokogiri'
 require 'chronic'
 require 'google_drive'
@@ -100,8 +100,8 @@ class SSRNAbstractPage
     # also, too, bogus <nobr> tags
     html.gsub!(/<\/*nobr>/m, '')
 
-    clean_html = SimpleTidy.clean(html, :force_output => true)
-    #clean_html = Nokogiri::HTML(html).to_html
+    #clean_html = SimpleTidy.clean(html, :force_output => true)
+    clean_html = Nokogiri::HTML(html).to_html
     @doc = Nokogiri::HTML(clean_html)
   end
 
@@ -531,7 +531,8 @@ class CLSAuthor
           #fakeid = RDF::URI('http://liicornell.org/worldcat/' + Digest::MD5.hexdigest(@worldCatID))
           #graph << [fakeid, RDF.type, clsauthor.WorldCatPage]
           #graph << [myuri, clsauthor.hasWorldCatPage, fakeid]
-          graph << [myuri, clsauthor.worldCatPage, RDF::URI(@worldCatID)]
+          graph << [myuri, clsauthor.worldCatID, RDF::URI(@worldCatID)]
+          graph << [myuri, OWL.sameAs, RDF::URI(@worldCatID)]
         end
 
         graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
@@ -551,6 +552,7 @@ class CLSAuthor
           #graph << [fakeid, RDF.type, clsauthor.ViafPage]
           #graph << [myuri, clsauthor.hasViafPage, fakeid]
           graph << [myuri, clsauthor.viafID, RDF::URI(@viafID)]
+          graph << [myuri, OWL.sameAs, RDF::URI(@viafID)]
         end
 
         graph << [myuri, clsauthor.crossRefID, @crossRefID] unless @crossRefID.empty?
@@ -729,7 +731,7 @@ class CLSAuthorRunner
   end
 
   def test_abstract_page
-    pg = SSRNAbstractPage.new('2218855', '489995')
+    pg = SSRNAbstractPage.new('1755706', '43904','http://liicornell.org/scholars/jeffrey_rachlinski_1')
     pg.scrape
     pg.create_triples
     pg.extract_paper_citations(@browser, @stashdir)
@@ -737,7 +739,7 @@ class CLSAuthorRunner
   end
 
   def test_paperlist
-    pg = SSRNAuthorPage.new('45120')
+    pg = SSRNAuthorPage.new('43904','http://liicornell.org/scholars/jeffrey_rachlinski_1')
     pg.scrape
     puts "#{pg}"
   end
