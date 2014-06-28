@@ -405,7 +405,7 @@ def plaintext_dump(dumpdir = MALLET_DUMP_DIR, keyopt = false)
   end
   myfile.close
 end
-#-- override to_s, mostly for debugging purposes
+#-- override to_s, mostly for debugging purposes ----
   def to_s
     strang = <<-"eos"
 Title: #{@title}
