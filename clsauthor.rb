@@ -34,6 +34,9 @@ GOOGLE_SPREADSHEET_KEY='0AkDG2tEbluFPdFhIT09tdnpKWHV2dHRNQUVMLXBNSHc'
 CITATIONER_URI='http://54.204.218.7/service/citationer/'
 DBPEDIA_LOOKUP_PREFIX='http://lookup.dbpedia.org/api/search.asmx/KeywordSearch?QueryString='
 
+# malletizing
+MALLET_DUMP_DIR='/tmp/wexdump'
+
 require 'rubygems'
 require 'net/http'
 require 'simple-tidy'
@@ -355,7 +358,7 @@ class SSRNAbstractPage
               if mention['url'] =~ /doc=Constitutions&juris=U\.S\./
                 p = Hash.new()
                 uristr = 'http://liicornell.org/liiconstitution/'
-                parts_ary = mention['url'].split(/\&/)
+                parts_ary = mention['url'].split(/&/)
                 parts_ary.shift
 
                 parts_ary.each do |part|
@@ -383,6 +386,25 @@ class SSRNAbstractPage
 
   end
 
+#-- dump a plaintext version.  the usual purpose is for Mallet ingestion.
+def plaintext_dump(dumpdir = MALLET_DUMP_DIR, keyopt = false)
+
+  scrape_abstract
+  @title = @doc.at_xpath("//meta[@name='citation_title']")["content"]
+  title_fn = @title.gsub(/\s+/, '_')
+  title_fn.gsub!(/[^a-zA-Z0-9_]/,'')
+
+  myfile = File.open("#{dumpdir}/#{title_fn}", 'w')
+  myfile << "#{@title}\n"
+  myfile << @abstract
+
+  if keyopt
+    @keywords = @doc.at_xpath("//meta[@name='citation_keywords']")["content"].split(/,\s*/)
+    myfile << "\n"
+    myfile << @keywords.join(' ')
+  end
+  myfile.close
+end
 #-- override to_s, mostly for debugging purposes
   def to_s
     strang = <<-"eos"
@@ -455,6 +477,13 @@ class SSRNAuthorPage
       abstract = SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
       abstract.scrape
       abstract.create_triples
+    end
+  end
+
+  def process_plaintext(dumpdir=MALLET_DUMP_DIR, keyopt = false)
+    @abstractlist.each do |absnum|
+      abstract = SSRNAbstractPage.new(absnum, @ssrn_id, @author_URI)
+      abstract.plaintext_dump(dumpdir, keyopt)
     end
   end
 
@@ -645,6 +674,16 @@ class CLSAuthorSpreadsheet
     end
   end
 
+  def process_plaintext(dumpdir=MALLET_DUMP_DIR, keyopt = false)
+    @author_list.each do |author|
+      next if author.ssrnAuthorID.empty?
+      page = SSRNAuthorPage.new(author.ssrnAuthorID, author.liiScholarID)
+      next if page.nil?
+      page.scrape
+      page.process_plaintext(dumpdir, keyopt)
+    end
+  end
+
   def process_extract_citations(browser, stashdir)
     @author_list.each do |author|
       next if author.ssrnAuthorID.empty?
@@ -714,6 +753,7 @@ class CLSAuthorRunner
     run_authors if @opts.authors
     run_papers if @opts.abstracts
     run_citations if @opts.cited
+    run_mallet_fodder if @opts.mallet_fodder
     test_abstract_page if @opts.test_abstract
     test_paperlist if @opts.test_author
     test_spreadsheet if @opts.test_spreadsheet
@@ -757,6 +797,12 @@ class CLSAuthorRunner
     @sheet.process_papers
   end
 
+  def run_mallet_fodder
+    dumpdir = MALLET_DUMP_DIR if @opts.mallet_dumpdir.nil?
+    Dir.mkdir(dumpdir) unless Dir.exist?(dumpdir)
+    @sheet.process_plaintext(dumpdir, @opts.mallet_keywords)
+  end
+
   def run_citations
     @sheet.process_extract_citations(@browser, @stashdir)
   end
@@ -779,6 +825,9 @@ where options are:
   opt :authors, "Generate triples for authors"
   opt :abstracts, "Generate triples for paper metadata"
   opt :cited, "Generate triples for primary law cited in papers"
+  opt :mallet_fodder, "Create plaintext versions of abstracts for ingestion into mallet"
+  opt :mallet_keywords, "Include author keywords in mallet documents"
+  opt :mallet_dumpdir, "Where to put mallet plaintext"
   opt :test_abstract, "Run scrape test for a single abstract"
   opt :test_author, "Run scrape test for a single author's papers"
   opt :test_spreadsheet, "Run spreadsheet dump"

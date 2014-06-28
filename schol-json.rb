@@ -94,9 +94,15 @@ class ScholarJsonFactory
     cite = parts.pop
     if type == 'CFR' && cite =~ /_part_/
       vol_or_title, midbit, partplc, pg_or_section = cite.split('_')
+      cln_pg_or_section = 'part-' + pg_or_section
       pg_or_section = 'part_' + pg_or_section
+    elsif type == 'CFR' && cite =~ /_subpart_/
+      vol_or_title, midbit, partplc, pg_or_section = cite.split('_')
+      cln_pg_or_section = 'subpart-' + pg_or_section
+      pg_or_section = 'subpart_' + pg_or_section
     else
       vol_or_title, midbit, pg_or_section = cite.split('_')
+      cln_pg_or_section = pg_or_section.dup
     end
 
     parentdir = rootdir + '/' + vol_or_title
@@ -105,7 +111,7 @@ class ScholarJsonFactory
     # did we do this one already?
     return if File.exists?(mydir + '/scholarship.json')
 
-    @cleanpath_file <<  "#{pathprefix}/text/#{vol_or_title}/#{pg_or_section}\n"
+    @cleanpath_file <<  "#{pathprefix}/text/#{vol_or_title}/#{cln_pg_or_section}\n"
 
     Dir.mkdir(parentdir) unless Dir.exist?(parentdir)
     Dir.mkdir(mydir) unless Dir.exist?(mydir)
@@ -159,6 +165,7 @@ EOQ
     f << results.to_json
     f.close
   end
+
 
 # make sure we have the directories we need
 
