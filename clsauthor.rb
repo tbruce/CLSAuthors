@@ -183,7 +183,7 @@ class SSRNAbstractPage
       writer << RDF::Graph.new do |graph|
         graph << [myuri, DC.contributor, RDF::URI(@cls_author_uri)]
         graph << [myuri, RDF.type, bibo.Article]
-        graph << [myuri, clsauthor.abstractPage, @url]
+        graph << [myuri, clsauthor.abstractPage, RDF::URI(@url)]
         graph << [myuri, DC.abstract, @abstract] unless @abstract.nil?
         graph << [myuri, clsauthor.ssrnOnlineDate, @online_date] unless @online_date.nil?
         graph << [myuri, clsauthor.ssrnPubDate, @pub_date] unless @pub_date.nil?
@@ -538,14 +538,14 @@ class CLSAuthor
           # fakeid = RDF::URI("http://liicornell.org/googleplus/" + @gPlusID)
           # graph << [fakeid, RDF.type, clsauthor.GooglePlusProfile]
           # graph << [myuri, clsauthor.hasGooglePlusProfile, fakeid]
-          graph << [myuri, clsauthor.gPlusProfile, GPLUS_URI_PREFIX+@gPlusID]
+          graph << [myuri, clsauthor.gPlusProfile, RDF::URI(GPLUS_URI_PREFIX+@gPlusID)]
         end
 
         unless @gScholarID.empty?
           # fakeid = RDF::URI('http://liicornell.org/googlescholar/' + @gScholarID)
           # graph << [fakeid, RDF.type, clsauthor.GoogleScholarPage]
           # graph << [myuri, clsauthor.hasGoogleScholarPage, fakeid]
-          graph << [myuri, clsauthor.gScholarPage, GSCHOLAR_URI_PREFIX + @gScholarID]
+          graph << [myuri, clsauthor.gScholarPage, RDF::URI(GSCHOLAR_URI_PREFIX + @gScholarID)]
         end
 
         unless @openGraphID.empty?
@@ -564,17 +564,17 @@ class CLSAuthor
           graph << [myuri, OWL.sameAs, RDF::URI(@worldCatID)]
         end
 
-        graph << [myuri, clsauthor.institutionBio, @clsBio] unless @clsBio.empty?
+        graph << [myuri, clsauthor.institutionBio, RDF::URI(@clsBio)] unless @clsBio.empty?
 
         unless @linkedInProfile.empty?
           #fakeid = RDF::URI('http://liicornell.org/linkedin/' + Digest::MD5.hexdigest(@linkedInProfile))
           #graph << [fakeid, RDF.type, clsauthor.LinkedInProfile]
           #graph << [myuri, clsauthor.hasLinkedInProfile, fakeid]
-          graph << [myuri, clsauthor.linkedInProfile, @linkedInProfile]
+          graph << [myuri, clsauthor.linkedInProfile, RDF::URI(@linkedInProfile)]
         end
 
 
-        graph << [myuri, FOAF.homepage, @homepage] unless @homepage.empty?
+        graph << [myuri, FOAF.homepage, RDF::URI(@homepage)] unless @homepage.empty?
 
         unless @viafID.empty?
           #fakeid = RDF::URI('http://liicornell.org/viaf/' + Digest::MD5.hexdigest(@viafID))
