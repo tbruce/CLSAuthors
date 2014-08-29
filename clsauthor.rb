@@ -39,7 +39,6 @@ MALLET_DUMP_DIR='/tmp/wexdump'
 
 require 'rubygems'
 require 'net/http'
-#require 'simple-tidy'
 require 'nokogiri'
 require 'chronic'
 require 'google_drive'
@@ -54,7 +53,7 @@ include RDF
 require 'rdf/ntriples'
 require 'digest/md5'
 require 'open-uri'
-#require 'roman-numerals'
+
 
 
 #-- class for representing/modeling some SSRN abstract pages
